@@ -1,10 +1,10 @@
 'use client';
-
+import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Home, LayoutGrid, MessageSquare, ShoppingCart, User,FileText } from 'lucide-react';
 
-export default function BottomNav() {
+function BottomNavContent(){
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const conversationId = searchParams.get('conversationId');
@@ -52,5 +52,12 @@ if (pathname?.startsWith("/products/")) {
         })}
       </div>
     </nav>
+  );
+}
+export default function BottomNav() {
+  return (
+    <Suspense fallback={null}>
+      <BottomNavContent />
+    </Suspense>
   );
 }

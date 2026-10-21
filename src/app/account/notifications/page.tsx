@@ -8,9 +8,12 @@ import { ArrowLeft, Bell, CheckCheck, Inbox } from "lucide-react";
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead } from "@/app/actions/notifications";
 
 export default async function NotificationsPage() {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) redirect("/account");
+const session = await getServerSession(authOptions);
+const user = session?.user as { id?: string; email?: string; name?: string };
 
+if (!session || !user?.id) {
+  redirect("/account");
+}
   const { notifications, unreadCount } = await getUserNotifications();
 
   return (
@@ -25,7 +28,7 @@ export default async function NotificationsPage() {
         </div>
 
         {unreadCount > 0 && (
-          <form action={markAllNotificationsAsRead}>
+          <form action={async () => { await markAllNotificationsAsRead(); }}>
             <button type="submit" className="text-xs font-semibold text-[#FF5500] hover:underline flex items-center gap-1">
               <CheckCheck className="w-4 h-4" /> Mark all read
             </button>

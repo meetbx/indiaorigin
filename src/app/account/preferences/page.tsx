@@ -10,12 +10,15 @@ import { updateUserPreferences } from "@/app/actions/preferences";
 import { revalidatePath } from "next/cache";
 
 export default async function RecommendationsPreferencesPage() {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
+const session = await getServerSession(authOptions);
+  const user = session?.user as { id?: string; email?: string; name?: string };
+
+  if (!session || !user?.id) {
     redirect("/account");
   }
 
-  const userId = session.user.id;
+  // Use 'user.id' instead of 'session.user.id'
+  const userId = user.id;
   const preferences = await prisma.userPreference.findUnique({
     where: { userId },
   });

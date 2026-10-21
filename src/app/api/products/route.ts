@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthenticatedContext } from "@/lib/auth/session";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
@@ -16,7 +18,7 @@ const createProductSchema = z.object({
   sampleAvailable: z.boolean().default(false),
   samplePrice: z.number().positive().optional(),
   leadTimeDays: z.number().int().positive().optional(),
-  specifications: z.record(z.string()).optional(),
+  specifications: z.record(z.string(), z.string()).optional(),
   customizationDetails: z.string().optional(),
   priceTiers: z.array(z.object({
     minQuantity: z.number().int().positive(),

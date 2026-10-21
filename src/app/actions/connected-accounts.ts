@@ -6,13 +6,15 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
 export async function unlinkGoogleAccount() {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
+const session = await getServerSession(authOptions);
+  const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+  if (!session || !userSession?.id) {
     return { success: false, error: "Unauthorized." };
   }
 
   try {
-    const userId = session.user.id;
+    const userId = userSession.id;
 
     // Check how many login methods the user has (prevent unlinking if they have no password and no other accounts)
     const user = await prisma.user.findUnique({

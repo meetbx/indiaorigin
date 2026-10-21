@@ -7,17 +7,19 @@ import { revalidatePath } from "next/cache";
 
 export async function getUserNotifications() {
   const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) return { notifications: [], unreadCount: 0 };
+  const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+  if (!session || !userSession?.id) return { notifications: [], unreadCount: 0 };
 
   try {
     const notifications = await prisma.notification.findMany({
-      where: { userId: session.user.id },
+      where: { userId: userSession.id },
       orderBy: { createdAt: "desc" },
       take: 30,
     });
 
     const unreadCount = await prisma.notification.count({
-      where: { userId: session.user.id, isRead: false },
+      where: { userId: userSession.id, isRead: false },
     });
 
     return { notifications, unreadCount };
@@ -29,11 +31,13 @@ export async function getUserNotifications() {
 
 export async function markNotificationAsRead(notificationId: string) {
   const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) return { success: false };
+  const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+  if (!session || !userSession?.id) return { success: false };
 
   try {
     await prisma.notification.updateMany({
-      where: { id: notificationId, userId: session.user.id },
+      where: { id: notificationId, userId: userSession.id },
       data: { isRead: true },
     });
 
@@ -47,11 +51,13 @@ export async function markNotificationAsRead(notificationId: string) {
 
 export async function markAllNotificationsAsRead() {
   const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) return { success: false };
+  const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+  if (!session || !userSession?.id) return { success: false };
 
   try {
     await prisma.notification.updateMany({
-      where: { userId: session.user.id, isRead: false },
+      where: { userId: userSession.id, isRead: false },
       data: { isRead: true },
     });
 

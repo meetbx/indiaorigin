@@ -7,18 +7,20 @@ import AuthForm from "./AuthForm";
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
-  const session = await getServerSession(authOptions);
+  
 
-  // STATE 1: Unauthenticated -> Show Login/Signup Form
-  if (!session?.user?.id) {
-    return <AuthForm />;
-  }
+const session = await getServerSession(authOptions);
+const sessionUser = session?.user as { id?: string; email?: string; name?: string };
 
-  // STATE 2: Authenticated -> Fetch fresh user details by immutable ID (supports phone-only accounts)
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: { accounts: true },
-  });
+if (!sessionUser?.id) {
+  return <AuthForm />;
+}
+
+// STATE 2: Authenticated -> Fetch fresh user details by immutable ID (supports phone-only accounts)
+const user = await prisma.user.findUnique({
+  where: { id: sessionUser.id },
+  include: { accounts: true },
+});
 
   if (!user) {
     return <AuthForm />;

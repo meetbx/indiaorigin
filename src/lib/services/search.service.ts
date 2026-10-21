@@ -184,10 +184,10 @@ export async function executeProductSearch(options: SearchOptions) {
     LIMIT ${safeLimit} OFFSET ${skip}
   `;
 
-  const [countResult, rawProducts]: [any[], any[]] = await Promise.all([
+ const [countResult, rawProducts] = await Promise.all([
     prisma.$queryRawUnsafe(countQuery, ...params),
     prisma.$queryRawUnsafe(dataQuery, ...params),
-  ]);
+  ])as [any[], any[]];
 
   const total = Number(countResult[0]?.total || 0);
   const executionTimeMs = Math.round(performance.now() - startTime);
@@ -250,7 +250,7 @@ export async function executeAutocomplete(q: string, limit: number = 6) {
   const escapedTerm = escapeLikePattern(searchTerm);
 
   try {
-    const [products, categories, manufacturers]: [any[], any[], any[]] = await Promise.all([
+    const [products, categories, manufacturers] = await Promise.all([
       prisma.$queryRaw`
         SELECT name, slug 
         FROM "Product" 
@@ -275,7 +275,7 @@ export async function executeAutocomplete(q: string, limit: number = 6) {
         WHERE "name" ILIKE ${`%${escapedTerm}%`} ESCAPE '\\'
         LIMIT 3
       `,
-    ]);
+    ])as [any[], any[], any[]];
 
     return {
       success: true,

@@ -71,6 +71,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
   // 2. Data Normalization
   const data = normalizeProductData(rawProduct, rawSimilar);
+  if (!data) notFound();
   const productBlocks = Array.isArray(data.details) ? data.details : [];
 
   return (
@@ -194,9 +195,15 @@ export default async function ProductDetailPage({ params }: PageProps) {
         </div>
 
         {/* SECTION 8: SUPPLIER OVERVIEW */}
-        <div className="bg-white shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <SupplierOverviewSection supplier={data.supplier} />
-        </div>
+<SupplierOverviewSection 
+  supplier={{ 
+    ...data.supplier, 
+    id: rawProduct.manufacturer.id,
+    location: typeof data.supplier.location === "string" 
+      ? { state: data.supplier.location, country: "" } 
+      : data.supplier.location ?? undefined
+  }} 
+/>
 
         {/* SECTION 9: MAIN MARKETS */}
         <div className="bg-white shadow-[0_1px_3px_rgba(0,0,0,0.02)]">

@@ -87,10 +87,11 @@ export const Header: React.FC<HeaderProps> = ({
 };
 
 function SessionNotificationBell() {
-  const { data: session } = useSession();
-  const userId = session?.user?.id;
+ const { data: session } = useSession();
+const userSession = session?.user as { id?: string; email?: string; name?: string };
+const userId = userSession?.id;
 
-  if (!userId) {
+if (!userId) {
     // Fallback static bell or hidden if not logged in
     return (
       <button

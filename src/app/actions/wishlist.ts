@@ -9,13 +9,15 @@ import { revalidatePath } from "next/cache";
  * Check if the current logged in user has liked a product
  */
 export async function checkIsLiked(productId: string) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return false;
+const session = await getServerSession(authOptions);
+const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+if (!userSession?.id) return false;
 
   const entry = await prisma.wishlist.findUnique({
     where: {
       userId_productId: {
-        userId: session.user.id,
+        userId: userSession.id,
         productId,
       },
     },
@@ -28,12 +30,14 @@ export async function checkIsLiked(productId: string) {
  * Toggle like/unlike for a product
  */
 export async function toggleWishlist(productId: string) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+const session = await getServerSession(authOptions);
+const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+if (!userSession?.id) {
     throw new Error("Unauthorized");
   }
 
-  const userId = session.user.id;
+  const userId = userSession.id;
 
   const existing = await prisma.wishlist.findUnique({
     where: {
@@ -68,11 +72,13 @@ export async function toggleWishlist(productId: string) {
  * Fetch all liked products for the logged in user
  */
 export async function getLikedProducts() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return [];
+const session = await getServerSession(authOptions);
+const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+if (!userSession?.id) return [];
 
   const wishlists = await prisma.wishlist.findMany({
-    where: { userId: session.user.id },
+    where: { userId: userSession.id, },
     include: {
       product: {
         include: {

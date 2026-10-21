@@ -1,6 +1,6 @@
 import { scoreAndRankProducts, DEFAULT_WEIGHTS } from "./ranking.service";
 import { ProductWithRelations } from "./types";
-import { scoreAndRankProducts } from "./ranking.service"
+
 
 function runVerification() {
   console.log("Running Recommendation Engine Verification...");

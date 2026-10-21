@@ -9,7 +9,7 @@ export interface Manufacturer {
   slug: string;
   isVerified: boolean;
   city: string;
-  adge?: "DIAMOND" | "GOLD" | "SILVER" | "NONE";
+  badge?: "DIAMOND" | "GOLD" | "SILVER" | "NONE";
   logo?: string | null;
   certifications?: string[];
   location?: Location | null;

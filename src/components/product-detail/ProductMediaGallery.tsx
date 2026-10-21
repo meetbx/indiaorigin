@@ -6,6 +6,7 @@ import { Heart, Scan, Package, Play, ChevronLeft, ChevronRight } from "lucide-re
 import BadgeDisplay from "@/components/marketplace/BadgeDisplay";
 import { checkIsLiked, toggleWishlist } from "@/app/actions/wishlist";
 import { useRouter } from "next/navigation";
+import { BadgeType } from "@prisma/client";
 
 interface MediaGalleryProps {
   productId: string;
@@ -101,10 +102,10 @@ export default function ProductMediaGallery({
   return (
     <div className="relative w-full aspect-square bg-white border-b border-slate-200 group overflow-hidden">
       {/* Badge Indicator */}
-      {badge && badge !== "NONE" && (
-        <div className="absolute top-3 left-3 z-20 pointer-events-none">
-          <BadgeDisplay badge={badge} />
-        </div>
+{badge && badge !== "NONE" && (
+  <div className="absolute top-3 left-3 z-20 pointer-events-none">
+    <BadgeDisplay badge={badge as BadgeType} />
+  </div>
       )}
 
       {/* Media Display Area */}

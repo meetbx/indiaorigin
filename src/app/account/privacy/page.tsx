@@ -8,8 +8,14 @@ import { ArrowLeft, ShieldCheck, Download, Trash2, FileText } from "lucide-react
 import PrivacyActionsClient from "../PrivacyActionsClient";
 
 export default async function PrivacySecurityPage() {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) redirect("/account");
+//  const session = await getServerSession(authOptions);
+//  if (!session || !session.user?.id) redirect("/account");
+
+
+const session = await getServerSession(authOptions);
+const user = session?.user as { id?: string; email?: string; name?: string };
+
+if (!session || !user?.id) redirect("/account");
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 font-sans max-w-2xl mx-auto">

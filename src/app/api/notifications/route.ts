@@ -5,12 +5,14 @@ import { prisma } from '@/lib/prisma';
 
 // GET: Fetch notifications & unread count
 export async function GET(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
+const session = await getServerSession(authOptions);
+const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+if (!userSession?.id) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = session.user.id;
+  const userId = userSession.id;
   const { searchParams } = new URL(request.url);
   const countOnly = searchParams.get('countOnly') === 'true';
 
@@ -41,12 +43,14 @@ export async function GET(request: Request) {
 
 // PATCH: Mark notification(s) as read
 export async function PATCH(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
+const session = await getServerSession(authOptions);
+const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+if (!userSession?.id){
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = session.user.id;
+  const userId = userSession.id;
 
   try {
     const body = await request.json();

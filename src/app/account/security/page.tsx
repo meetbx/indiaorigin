@@ -6,16 +6,18 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ShieldCheck, Key, Lock, CheckCircle2 } from "lucide-react";
-import SignOutButton from "@/components/account/SignOutButton";
+// import SignOutButton from "@/components/account/SignOutButton";
 
 export default async function AccountSecurityPage() {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
+const session = await getServerSession(authOptions);
+  const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+  if (!session || !userSession?.id) {
     redirect("/account");
   }
 
   const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: userSession.id },
     include: { accounts: true, sessions: true },
   });
 

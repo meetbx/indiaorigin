@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { authOptions } from "@/lib/auth";
-import { getSessionUserId } from "@/lib/auth"; // Adjust to your actual session utility
+// import { getSessionUserId } from "@/lib/auth"; // Adjust to your actual session utility
 import { v2 as cloudinary } from "cloudinary";
 
 /**

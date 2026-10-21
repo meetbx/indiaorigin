@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+// Add Viewport to your Next.js import:
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/layout/BottomNav";

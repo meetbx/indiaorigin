@@ -16,10 +16,21 @@ export default async function SearchPage({ searchParams }: SearchProps) {
   const rawParams = await searchParams;
   
   const parsedValidation = searchParamsSchema.safeParse(rawParams);
+
   const filters = parsedValidation.success ? parsedValidation.data : {
     page: 1,
     limit: 20,
     sort: "relevance" as const,
+    q: undefined,
+    category: undefined,
+    categoryId: undefined,
+    minPrice: undefined,
+    maxPrice: undefined,
+    minMoq: undefined,
+    maxMoq: undefined,
+    material: undefined,
+    state: undefined,
+    verifiedOnly: undefined,
   };
 
   const {
@@ -99,7 +110,7 @@ export default async function SearchPage({ searchParams }: SearchProps) {
     select: { id: true, name: true, slug: true },
   });
 
-  const formattedProducts: Product[] = searchResult.products.map((p) => ({
+const formattedProducts: Product[] = searchResult.products.map((p) => ({
     id: p.id,
     name: p.name,
     slug: p.slug,
@@ -110,6 +121,11 @@ export default async function SearchPage({ searchParams }: SearchProps) {
     images: p.images,
     inStock: p.inStock,
     isPublished: p.isPublished,
+    categoryId: "",          // Fallback empty string if not returned by search
+    manufacturerId: p.supplier.id,
+    createdAt: new Date().toISOString(),   // <--- Convert to string
+    updatedAt: new Date().toISOString(),   // <--- Convert to string
+    category: { id: "", name: "", slug: "" }, // Fallback object structure
     specifications: p.specifications as Record<string, any>,
     manufacturer: {
       id: p.supplier.id,
@@ -118,6 +134,7 @@ export default async function SearchPage({ searchParams }: SearchProps) {
       logo: p.supplier.logo || undefined,
       isVerified: p.supplier.isVerified,
       badge: p.supplier.badge as any,
+      city: "", // Fallback since location only has state/slug
       location: {
         state: p.supplier.location.state,
         slug: p.supplier.location.slug,

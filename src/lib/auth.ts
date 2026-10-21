@@ -125,7 +125,7 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
+    async jwt({ token, user, trigger, session }): Promise<any>  {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role || "BUYER";
@@ -155,11 +155,20 @@ export const authOptions: NextAuthOptions = {
 
       return token;
     },
-    async session({ session, token }) {
+async session({ session, token }) {
       if (token && session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as string;
-        session.user.phone = token.phone as string | null;
+        const customUser = session.user as { 
+          id?: string; 
+          role?: string; 
+          phone?: string | null; 
+          name?: string | null; 
+          email?: string | null; 
+          image?: string | null 
+        };
+        
+        customUser.id = token.id as string;
+        customUser.role = token.role as string;
+        customUser.phone = token.phone as string | null;
       }
       return session;
     },

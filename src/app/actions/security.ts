@@ -11,8 +11,10 @@ export async function changePassword(formData: {
   newPassword: string;
   confirmPassword: string;
 }) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
+const session = await getServerSession(authOptions);
+const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+if (!session || !userSession?.id) {
     return { success: false, error: "Unauthorized. Please log in." };
   }
 
@@ -32,7 +34,7 @@ export async function changePassword(formData: {
 
   try {
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: userSession.id},
       select: { passwordHash: true },
     });
 
@@ -53,7 +55,7 @@ export async function changePassword(formData: {
     const newPasswordHash = await bcrypt.hash(newPassword, 10);
 
     await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: userSession.id },
       data: { passwordHash: newPasswordHash },
     });
 

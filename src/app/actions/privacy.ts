@@ -6,13 +6,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function exportUserData() {
   const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
+  const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+  if (!session || !userSession?.id) {
     return { success: false, error: "Unauthorized." };
   }
 
   try {
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: userSession.id },
       include: {
         accounts: true,
         wishlists: { include: { product: true } },
@@ -37,11 +39,13 @@ export async function exportUserData() {
 
 export async function deleteUserAccount() {
   const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
+  const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+  if (!session || !userSession?.id) {
     return { success: false, error: "Unauthorized." };
   }
 
-  const userId = session.user.id;
+  const userId = userSession.id;
 
   try {
     // Cascade delete user data securely

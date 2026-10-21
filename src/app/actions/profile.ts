@@ -6,12 +6,14 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
 export async function updateProfile(formData: { name?: string; email?: string }) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
+const session = await getServerSession(authOptions);
+const userSession = session?.user as { id?: string; email?: string; name?: string };
+
+if (!session || !userSession?.id) {
     return { success: false, error: "Unauthorized. Please log in." };
   }
 
-  const userId = session.user.id;
+  const userId = userSession.id;
   const updateData: { name?: string; email?: string } = {};
 
   // 1. Validate & sanitize Name if provided

@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+
+@import "tailwindcss";
+/* Prevent elastic rubber-band bouncing globally without breaking scrolling */
+html, body {
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+body {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Force mobile inputs to 16px to prevent auto-zooming */
+input, textarea, select {
+  font-size: 16px !important;
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 1rem);
+  }
+
+  /* Luxury Manufacturer Badge Gradients */
+  .badge-diamond {
+
+
+    background: linear-gradient(
+    120deg,
+    rgba(205, 240, 240, 0.55),
+    rgba(16, 230, 241, 0.479),
+    rgba(86, 200, 212, 0.895)
+  );
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.4),
+    0 2px 10px rgba(34, 211, 238, 0.2);
+    
+  }
+
+
+  .badge-gold {
+    background: linear-gradient(135deg, #ded8b997 0%, #edb75aaf 50%, #efd13c 100%);
+     -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+    box-shadow: 0 2px 10px rgba(245, 158, 11, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+
+    background-clip: padding-box;
+
+    
+  }
+.badge-silver {
+  background: linear-gradient(
+    120deg,
+    rgba(226, 232, 240, 0.81) 0%,
+    rgba(152, 158, 166, 0.918) 50%,
+    rgba(99, 105, 113, 0.867) 100%
+  );
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    0 2px 8px rgba(100, 116, 139, 0.15);
+
+  background-clip: padding-box;
+}
+
+  .badge-verified {
+    background: linear-gradient(135deg, #b5d9cc92 0%, #44cf9296 50%, #39d78d 100%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+    box-shadow: 0 2px 10px rgba(115, 245, 204, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+  
+  /* Glassmorphic Action Bar Utilities */
+/* Target Floating Action Bar Styling */
+  .action-bar-glass {
+    background: rgba(248, 250, 252, 0.92);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.04), 0 -1px 0 rgba(226, 232, 240, 0.8);
+  }
+
+  .btn-chat-target {
+    background: rgba(241, 245, 249, 0.6);
+    border: 1px solid #334155;
+    color: #1e293b;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+  .btn-chat-target:hover {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: #0f172a;
+  }
+
+  .btn-inquiry-target {
+    background: #e54d26;
+    color: #ffffff;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 10px rgba(229, 77, 38, 0.25);
+  }
+  .btn-inquiry-target:hover {
+    background: #d8431c;
+    box-shadow: 0 4px 14px rgba(229, 77, 38, 0.35);
+  }
+  .btn-inquiry-target:active {
+    transform: scale(0.98);
+  }
+
+
+
+    .bad-diamond {
+
+
+    background: linear-gradient(
+    120deg,
+    rgba(235, 244, 244, 0.5),
+    rgba(168, 251, 255, 0.479),
+    rgba(118, 194, 202, 0.895)
+  );
+
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.4),
+    0 2px 10px rgba(34, 211, 238, 0.2);
+    
+  }
+
+
+  .bad-gold {
+    background: linear-gradient(135deg, #ded8b997 0%, #edb75aaf 50%, #efd13c 100%);
+     -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+    box-shadow: 0 2px 10px rgba(245, 158, 11, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+
+    background-clip: padding-box;
+
+    
+  }
+.bad-silver {
+  background: linear-gradient(
+    120deg,
+    rgba(115, 115, 116, 0.407) 0%,
+    rgba(171, 171, 171, 0.42) 50%,
+    rgba(90, 91, 91, 0.4) 100%
+  );
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    0 2px 8px rgba(100, 116, 139, 0.15);
+
+  background-clip: padding-box;
+}
+
+  .bad-verified {
+    background: linear-gradient(135deg, #b5d9cc92 0%, #44cf9296 50%, #39d78d 100%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+    box-shadow: 0 2px 10px rgba(115, 245, 204, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+
+}
+

@@ -87,12 +87,12 @@ export default async function ProductDetailPage({ params }: PageProps) {
     },
   });
 
-  // 2. Data Normalization
-const data = normalizeProductData(rawProduct, rawSimilar);
+// 2. Data Normalization
+  const data = normalizeProductData(rawProduct, rawSimilar);
   if (!data) notFound();
   const productBlocks = Array.isArray(data.details) ? data.details : [];
 
-  // Map rawSimilar to match the expected RecommendedProduct structure safely
+  // Map rawSimilar to match the expected RecommendedProduct structure precisely
   const initialSimilarProducts = rawSimilar.map((p) => ({
     id: p.id,
     name: p.name,
@@ -100,12 +100,12 @@ const data = normalizeProductData(rawProduct, rawSimilar);
     images: p.images || [],
     minPrice: p.minPrice ?? 0,
     maxPrice: p.maxPrice ?? 0,
-    moq: 1,
-    unit: 'Piece',
-    isPublished: true,
-    manufacturer: null,
+    moq: p.moq,
+    unit: p.unit,
+    isPublished: p.isPublished,
+    manufacturer: p.manufacturer,
     score: 100,
-    reasons: ['Similar category']
+    reasons: ['Similar category'],
   }));
 
   return (

@@ -1,3 +1,5 @@
+export const revalidate = 300; // Cache recommendation results for 5 minutes
+
 import { NextRequest, NextResponse } from "next/server";
 import { getSimilarProductsForIdentifier } from "@/lib/services/recommendation/recommendation.service";
 

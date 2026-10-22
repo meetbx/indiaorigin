@@ -4,14 +4,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Building2, MapPin, CheckCircle2, ChevronRight, Zap, ShieldCheck } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 interface SupplierOverviewProps {
   supplier: {
     id: string;
     name: string;
     slug: string;
-    logo?: string | null;
+    logo?: string | null; // Added logo field support
     yearsOnPlatform?: number;
     location?: {
       state?: string;
@@ -21,9 +20,7 @@ interface SupplierOverviewProps {
     onTimeDelivery?: string;
   };
 }
-
 export default function SupplierOverviewSection({ supplier }: SupplierOverviewProps) {
-  const router = useRouter();
   const profileUrl = `/manufacturers/${supplier.slug || supplier.id}`;
 
   return (
@@ -33,9 +30,9 @@ export default function SupplierOverviewSection({ supplier }: SupplierOverviewPr
         Supplier Overview
       </h3>
       
-      {/* SUPPLIER CARD CONTAINER AS A DIV WITH CLICK HANDLER */}
-      <div
-        onClick={() => router.push(profileUrl)}
+      {/* SUPPLIER CARD CONTAINER AS A LINK */}
+      <Link
+        href={profileUrl}
         className="block bg-slate-50/80 border border-slate-200/70 rounded-2xl p-4 transition-all hover:border-slate-300 group cursor-pointer"
       >
         {/* HEADER ROW: LOGO & NAME */}
@@ -57,7 +54,7 @@ export default function SupplierOverviewSection({ supplier }: SupplierOverviewPr
           {/* Details Column */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <h4 className="font-bold text-slate-900 text-sm truncate transition-colors">
+              <h4 className="font-bold text-slate-900 text-sm truncate  transition-colors">
                 {supplier.name || "k d avk dakv ka"}
               </h4>
               <CheckCircle2 className="w-4 h-4 text-emerald-500 fill-emerald-500/20 shrink-0" />
@@ -96,7 +93,7 @@ export default function SupplierOverviewSection({ supplier }: SupplierOverviewPr
 
         {/* ACTION BUTTONS ROW */}
         <div className="grid grid-cols-2 gap-3 mt-4" onClick={(e) => e.stopPropagation()}>
-          {/* More Products Button */}
+          {/* More Products Button (Isolated click) */}
           <Link
             href={`/search?supplier=${supplier.slug || supplier.id}`}
             className="w-full h-10 rounded-full border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold flex items-center justify-center transition-all shadow-2xs"
@@ -104,16 +101,13 @@ export default function SupplierOverviewSection({ supplier }: SupplierOverviewPr
             More products
           </Link>
 
-          {/* Company Profile Button */}
-          <Link
-            href={profileUrl}
-            className="w-full h-10 rounded-full bg-slate-900 group-hover:bg-slate-800 text-white text-xs font-semibold flex items-center justify-center gap-1 transition-all shadow-xs"
-          >
+          {/* Company Profile Button (Optional styling enhancement, since whole card is now a link) */}
+          <div className="w-full h-10 rounded-full bg-slate-900 group-hover:bg-slate-800 text-white text-xs font-semibold flex items-center justify-center gap-1 transition-all shadow-xs">
             <span>Company profile</span>
             <ChevronRight className="w-3.5 h-3.5 stroke-[2]" />
-          </Link>
+          </div>
         </div>
-      </div>
+      </Link>
     </div>
   );
 }

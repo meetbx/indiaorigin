@@ -5,12 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { CheckCircle2, Building2, PackageX, Gem, Sparkles } from 'lucide-react';
 
-function getOptimizedCloudinaryUrl(url: string, transformation: string) {
-  if (!url || !url.includes("res.cloudinary.com")) return url;
-  if (url.includes(transformation)) return url;
-  return url.replace("/upload/", `/upload/${transformation}/`);
-}
-
 interface ManufacturerSummary {
   id: string;
   name: string;
@@ -38,14 +32,12 @@ interface RecommendedProduct {
 interface RecommendationsProps {
   productId?: string;
   slug: string;
-  initialSimilar?: RecommendedProduct[];
 }
 
-export default function RecommendationsSection({ productId, slug,initialSimilar = [] }: RecommendationsProps) {
+export default function RecommendationsSection({ productId, slug }: RecommendationsProps) {
   const [similarProducts, setSimilarProducts] = useState<RecommendedProduct[]>([]);
   const [altManufacturers, setAltManufacturers] = useState<RecommendedProduct[]>([]);
-  const [loading, setLoading] = useState(initialSimilar.length === 0); // Skip loading skeleton if server data exists
-
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -54,19 +46,17 @@ export default function RecommendationsSection({ productId, slug,initialSimilar 
 
     async function fetchRecommendations() {
       try {
-        setLoading(similarProducts.length === 0);
+        setLoading(true);
 
         const [similarRes, mfgRes] = await Promise.allSettled([
-          initialSimilar.length > 0 
-            ? Promise.resolve(null) 
-            : fetch(`/api/recommendations/similar?${identifierParam}&limit=4`, { signal: controller.signal }),
+          fetch(`/api/recommendations/similar?${identifierParam}&limit=4`, { signal: controller.signal }),
           fetch(`/api/recommendations/manufacturers?${identifierParam}&limit=4`, { signal: controller.signal }),
         ]);
 
-        let fetchedSimilar = similarProducts;
+        let fetchedSimilar: RecommendedProduct[] = [];
         let fetchedAlt: RecommendedProduct[] = [];
 
-        if (!initialSimilar.length && similarRes.status === 'fulfilled' && similarRes.value && similarRes.value.ok) {
+        if (similarRes.status === 'fulfilled' && similarRes.value.ok) {
           const data = await similarRes.value.json();
           if (data.success && Array.isArray(data.recommendations)) {
             fetchedSimilar = data.recommendations;
@@ -82,6 +72,9 @@ export default function RecommendationsSection({ productId, slug,initialSimilar 
 
         if (isMounted) {
           setSimilarProducts(fetchedSimilar);
+          
+          // Deduplication: Filter out any product from alternative manufacturers 
+          // that is already present in the similar products list to prevent repetition.
           const similarIds = new Set(fetchedSimilar.map((p) => p.id));
           const uniqueAlt = fetchedAlt.filter((p) => !similarIds.has(p.id));
           setAltManufacturers(uniqueAlt);
@@ -103,9 +96,7 @@ export default function RecommendationsSection({ productId, slug,initialSimilar 
       isMounted = false;
       controller.abort();
     };
-  }, [productId, slug, initialSimilar]);
-
- 
+  }, [productId, slug]);
 
   if (!loading && similarProducts.length === 0 && altManufacturers.length === 0) {
     return null;
@@ -157,8 +148,7 @@ export default function RecommendationsSection({ productId, slug,initialSimilar 
 
 function ProductCard({ product }: { product: RecommendedProduct }) {
   const [imgError, setImgError] = useState(false);
-  const rawImage = product.images?.[0] || '/placeholder-product.png';
-  const primaryImage = getOptimizedCloudinaryUrl(rawImage, "f_auto,q_auto,c_limit,w_400");
+  const primaryImage = product.images?.[0] || '/placeholder-product.png';
 
   const validMin = typeof product.minPrice === 'number' && Number.isFinite(product.minPrice) && product.minPrice > 0;
   const validMax = typeof product.maxPrice === 'number' && Number.isFinite(product.maxPrice) && product.maxPrice > product.minPrice;

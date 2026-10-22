@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Metadata } from "next";
-import { Suspense } from "react";
 import { 
   ChevronLeft, Search, ShoppingCart, MoreHorizontal, 
   ChevronRight, Star, ShieldCheck, CheckCircle, Package, Store, Share2, SlidersHorizontal, Phone ,Send
@@ -70,7 +69,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
   //   take: 6,
   // });
   // Fetch similar products dynamically with selective fields
-
+  
   const rawSimilar = await prisma.product.findMany({
     where: {
       categoryId: rawProduct.categoryId,
@@ -87,26 +86,10 @@ export default async function ProductDetailPage({ params }: PageProps) {
     },
   });
 
-// 2. Data Normalization
+  // 2. Data Normalization
   const data = normalizeProductData(rawProduct, rawSimilar);
   if (!data) notFound();
   const productBlocks = Array.isArray(data.details) ? data.details : [];
-
-  // Map rawSimilar to match the expected RecommendedProduct structure precisely
-  const initialSimilarProducts = rawSimilar.map((p) => ({
-    id: p.id,
-    name: p.name,
-    slug: p.slug,
-    images: p.images || [],
-    minPrice: p.minPrice ?? 0,
-    maxPrice: p.maxPrice ?? 0,
-    moq: p.moq,
-    unit: p.unit,
-    isPublished: p.isPublished,
-    manufacturer: p.manufacturer,
-    score: 100,
-    reasons: ['Similar category'],
-  }));
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-28 max-w-md mx-auto shadow-2xl border-x border-slate-200/60 font-sans">
@@ -244,22 +227,14 @@ export default async function ProductDetailPage({ params }: PageProps) {
           <SupplierMarketsSection markets={data.supplier.mainMarkets} />
         </div>
 
-{/* SECTION 10: RECOMMENDATIONS (SIMILAR PRODUCTS & ALTERNATIVE MANUFACTURERS) */}
-        <Suspense fallback={<div className="h-48 bg-white animate-pulse rounded-xl m-4" />}>
-          <RecommendationsSection 
-            productId={rawProduct.id} 
-            slug={data.slug} 
-            initialSimilar={rawSimilar}  
-          />
-        </Suspense>
+        {/* SECTION 10: RECOMMENDATIONS (SIMILAR PRODUCTS & ALTERNATIVE MANUFACTURERS) */}
+        <RecommendationsSection productId={rawProduct.id} slug={data.slug} />
 
         {/* SECTION 11: DETAILED A+ PRODUCT BLOCKS */}
         {productBlocks.length > 0 && (
           <div className="bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
             <h3 className="font-bold text-slate-900 text-xs mb-3 uppercase tracking-wider">Product details</h3>
-            <Suspense fallback={<div className="h-32 bg-slate-50 animate-pulse rounded-xl" />}>
-              <ProductDetailsRenderer blocks={productBlocks} />
-            </Suspense>
+            <ProductDetailsRenderer blocks={productBlocks} />
           </div>
         )}
 

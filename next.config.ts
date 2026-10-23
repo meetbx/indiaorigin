@@ -1,15 +1,15 @@
 import type { NextConfig } from "next";
-
 import bundleAnalyzer from "@next/bundle-analyzer";
 
 const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
 });
 
-
-
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["surviving-endocrine-widen.ngrok-free.dev"],
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+  },
   images: {
     remotePatterns: [
       {
@@ -25,9 +25,9 @@ const nextConfig: NextConfig = {
         hostname: "res.cloudinary.com",
       },
       {
-protocol: "https",
-hostname: "img.freepik.com",
-},
+        protocol: "https",
+        hostname: "img.freepik.com",
+      },
     ],
   },
 };

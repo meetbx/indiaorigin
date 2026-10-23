@@ -8,6 +8,16 @@ import { checkIsLiked, toggleWishlist } from "@/app/actions/wishlist";
 import { useRouter } from "next/navigation";
 import { BadgeType } from "@prisma/client";
 
+
+// Helper to inject Cloudinary optimization parameters securely
+function getOptimizedCloudinaryUrl(url: string, transformation: string) {
+  if (!url || !url.includes("res.cloudinary.com")) return url;
+  if (url.includes(transformation)) return url; // Prevent duplicate injection
+  
+  // Inserts transformation right after /upload/
+  return url.replace("/upload/", `/upload/${transformation}/`);
+}
+
 interface MediaGalleryProps {
   productId: string;
   images: string[];
@@ -122,24 +132,30 @@ export default function ProductMediaGallery({
               overscrollBehaviorX: "none" // Prevents empty space bouncing on edges
             }}
           >
-            {images.map((imgUrl, index) => (
-              <div
-                key={`${imgUrl}-${index}`}
-                className="w-full h-full flex-shrink-0 snap-start snap-always relative"
-              >
-                <Image
-                  src={imgUrl}
-                  alt={`${productName} - Image ${index + 1}`}
-                  fill
-                  className="object-cover select-none"
-                  priority={index === 0}
-                  sizes="(max-width: 768px) 100vw, 448px"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-              </div>
-            ))}
+            {images.map((imgUrl, index) => {
+              // Apply w_1000 for main gallery image
+              const optimizedSrc = getOptimizedCloudinaryUrl(imgUrl, "f_auto,q_auto,c_limit,w_1000");
+              
+              return (
+                <div
+                  key={`${imgUrl}-${index}`}
+                  className="w-full h-full flex-shrink-0 snap-start snap-always relative"
+                >
+<Image
+                    src={optimizedSrc}
+                    alt={`${productName} - Image ${index + 1}`}
+                    fill
+                    className="object-cover select-none"
+                    priority={index === 0}
+                    {...(index === 0 ? { fetchPriority: "high" } : {})}
+                    sizes="(max-width: 768px) 100vw, 448px"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Desktop Arrow Navigation */}

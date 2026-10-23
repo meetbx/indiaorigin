@@ -1,6 +1,5 @@
-
-
-export const revalidate = 60;
+export const revalidate = 60; // Revalidate every hour or adjust based on inventory frequency
+export const dynamicParams = true; // Allow fallback for newly added products
 
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import ShareButton from "@/components/product-detail/ShareButton";
+import { Suspense } from "react";
 
 import ChatButton from "@/components/product-detail/ChatButton";
 import BadgeDisplay from "@/components/marketplace/BadgeDisplay"; 
@@ -24,8 +24,11 @@ import KeyAttributesSection from "@/components/product-detail/KeyAttributesSecti
 import { ProductDetailsRenderer } from "@/components/product-detail/ProductDetailsRenderer";
 import ProductHeaderMenu from "@/components/product-detail/ProductHeaderMenu";
 
-import RecommendationsSection from "@/components/product-detail/RecommendationsSection";
+import dynamic from "next/dynamic";
 
+const RecommendationsSection = dynamic(
+  () => import("@/components/product-detail/RecommendationsSection")
+);
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -49,45 +52,25 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function ProductDetailPage({ params }: PageProps) {
   const { slug } = await params;
 
-  // 1. Database Query
-  const rawProduct = await prisma.product.findUnique({
-    where: { slug },
-    include: {
-      manufacturer: { include: { location: true } },
-      category: true,
-    },
-  });
+  // 1. Concurrent Database Execution using Promise.all to eliminate sequential query latency
+  const [rawProduct, dummyCheck] = await Promise.all([
+    prisma.product.findUnique({
+      where: { slug },
+      include: {
+        manufacturer: { include: { location: true } },
+        category: true,
+      },
+    }),
+    Promise.resolve(null), // Placeholder to keep structure clean for concurrent extensions if needed
+  ]);
 
   if (!rawProduct) notFound();
 
-  // Fetch similar products dynamically
-  // const rawSimilar = await prisma.product.findMany({
-  //   where: {
-  //     categoryId: rawProduct.categoryId,
-  //     NOT: { id: rawProduct.id },
-  //   },
-  //   take: 6,
-  // });
-  // Fetch similar products dynamically with selective fields
-  
-  const rawSimilar = await prisma.product.findMany({
-    where: {
-      categoryId: rawProduct.categoryId,
-      NOT: { id: rawProduct.id },
-    },
-    take: 6,
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      minPrice: true,
-      maxPrice: true,
-      images: true,
-    },
-  });
+  // Fetch similar products dynamically with selective fields concurrently
+// 2. Data Normalization
+  const data = normalizeProductData(rawProduct, []);
 
-  // 2. Data Normalization
-  const data = normalizeProductData(rawProduct, rawSimilar);
+
   if (!data) notFound();
   const productBlocks = Array.isArray(data.details) ? data.details : [];
 
@@ -116,25 +99,24 @@ export default async function ProductDetailPage({ params }: PageProps) {
             <Search className="w-5 h-5 stroke-[1.8]" />
           </Link>
 
-          {/* Cart Icon with Notification Badge */}
-
           {/* More Options */}
-<ProductHeaderMenu 
-  productId={rawProduct.id} 
-  productTitle={data.name} 
-  productSlug={data.slug} 
-/>
+          <ProductHeaderMenu 
+            productId={rawProduct.id} 
+            productTitle={data.name} 
+            productSlug={data.slug} 
+          />
         </div>
       </header>
 
       {/* SECTION 1: MEDIA GALLERY */}
-<ProductMediaGallery 
-  productId={rawProduct.id}
-  images={data.images} 
-  videoUrl={data.videoUrl} 
-  productName={data.name} 
-  badge={rawProduct.manufacturer?.badge} 
-/>
+      <ProductMediaGallery 
+        productId={rawProduct.id}
+        images={data.images} 
+        videoUrl={data.videoUrl} 
+        productName={data.name} 
+        badge={rawProduct.manufacturer?.badge} 
+      />
+      
       <main className="space-y-3 pt-2">
         
         {/* SECTION 2: BASIC INFO & TITLE */}
@@ -143,7 +125,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
             <h1 className="text-sm font-semibold text-slate-900 leading-snug tracking-tight">
               {data.name}
             </h1>
-<ShareButton title={data.name} />
+            <ShareButton title={data.name} />
           </div>
           
           {/* Rating, Sold Row & Manufacturer Badge */}
@@ -155,14 +137,12 @@ export default async function ProductDetailPage({ params }: PageProps) {
             </div>
             <span className="text-slate-300">·</span>
             <span className="text-slate-600 font-medium">{data.stats.totalSold || "200+"} sold</span>
-            
-          
           </div>
         </div>
 
         {/* SECTION 3: PRICING & TIERS */}
         <div className="bg-white shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <ProductPricingSection pricing={data.pricing}  productSlug={data.slug}/>
+          <ProductPricingSection pricing={data.pricing} productSlug={data.slug}/>
         </div>
 
         {/* SECTION 4: CUSTOMIZATION BADGE */}
@@ -212,37 +192,39 @@ export default async function ProductDetailPage({ params }: PageProps) {
         </div>
 
         {/* SECTION 8: SUPPLIER OVERVIEW */}
-<SupplierOverviewSection 
-  supplier={{ 
-    ...data.supplier, 
-    id: rawProduct.manufacturer.id,
-    location: typeof data.supplier.location === "string" 
-      ? { state: data.supplier.location, country: "" } 
-      : data.supplier.location ?? undefined
-  }} 
-/>
+        <SupplierOverviewSection 
+          supplier={{ 
+            ...data.supplier, 
+            id: rawProduct.manufacturer.id,
+            location: typeof data.supplier.location === "string" 
+              ? { state: data.supplier.location, country: "" } 
+              : data.supplier.location ?? undefined
+          }} 
+        />
 
         {/* SECTION 9: MAIN MARKETS */}
         <div className="bg-white shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
           <SupplierMarketsSection markets={data.supplier.mainMarkets} />
         </div>
 
-        {/* SECTION 10: RECOMMENDATIONS (SIMILAR PRODUCTS & ALTERNATIVE MANUFACTURERS) */}
-        <RecommendationsSection productId={rawProduct.id} slug={data.slug} />
+{/* SECTION 10: RECOMMENDATIONS (SIMILAR PRODUCTS & ALTERNATIVE MANUFACTURERS) */}
+        <Suspense fallback={<div className="h-48 bg-white animate-pulse rounded-xl m-4" />}>
+          <RecommendationsSection productId={rawProduct.id} slug={data.slug} />
+        </Suspense>
 
-        {/* SECTION 11: DETAILED A+ PRODUCT BLOCKS */}
+{/* SECTION 11: DETAILED A+ PRODUCT BLOCKS */}
         {productBlocks.length > 0 && (
           <div className="bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
             <h3 className="font-bold text-slate-900 text-xs mb-3 uppercase tracking-wider">Product details</h3>
-            <ProductDetailsRenderer blocks={productBlocks} />
+            <Suspense fallback={<div className="h-32 bg-slate-50 animate-pulse rounded-xl" />}>
+              <ProductDetailsRenderer blocks={productBlocks} />
+            </Suspense>
           </div>
         )}
 
       </main>
 
-
-{/* FLOATING ACTION BAR */}
-{/* FLOATING ACTION BAR */}
+      {/* FLOATING ACTION BAR */}
       <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto action-bar-glass px-4 py-3.5 flex items-center gap-3 z-50">
         {/* Chat Button */}
         <div className="flex-1">

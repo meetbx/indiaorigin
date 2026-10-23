@@ -5,6 +5,21 @@ import Link from "next/link";
 import Image from "next/image";
 import { CheckCircle2, MapPin, PackageX, RefreshCw, Gem, Sparkles } from "lucide-react";
 import { Product } from "@/types/marketplace";
+import { useRouter } from "next/navigation";
+
+/** Add stable Cloudinary delivery transforms for marketplace thumbnails.
+ * Original URLs remain unchanged for non-Cloudinary images and URLs that are not
+ * standard Cloudinary image-upload URLs. Next/Image still handles responsive delivery.
+ */
+function getMarketplaceImageUrl(url: string, width: number): string {
+  if (!url || !url.includes("res.cloudinary.com") || !url.includes("/image/upload/")) return url;
+  const marker = "/image/upload/";
+  const markerIndex = url.indexOf(marker);
+  const afterUpload = url.slice(markerIndex + marker.length);
+  // Avoid duplicating transformations if this URL already contains a Cloudinary transform.
+  if (/^(?:[^/]*,)*(?:f_auto|q_auto|w_\d+|c_limit)(?:,|\/)/.test(afterUpload)) return url;
+  return `${url.slice(0, markerIndex + marker.length)}f_auto,q_auto,w_${width},c_limit/${afterUpload}`;
+}
 
 interface ProductGridProps {
   products: Product[];
@@ -18,7 +33,11 @@ interface ProductGridProps {
 
 export const ProductCard: React.FC<{ product: Product }> = ({ product }) => {
   const [imgError, setImgError] = useState(false);
-  const primaryImage = product.images?.[0] || "/placeholder-product.png";
+  const router = useRouter();
+  const productHref = `/products/${product.slug || product.id}`;
+  const originalImage = product.images?.[0] || "/placeholder-product.png";
+  const primaryImage = getMarketplaceImageUrl(originalImage, 640);
+  const prefetchProduct = () => router.prefetch(productHref);
 
   const formattedMinPrice = product.minPrice > 0 ? `₹${product.minPrice.toLocaleString("en-IN")}` : null;
   const formattedMaxPrice = product.maxPrice > 0 ? `₹${product.maxPrice.toLocaleString("en-IN")}` : null;
@@ -68,7 +87,13 @@ if (badge === "GOLD") {
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/70 overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_20px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between group">
-      <Link href={`/products/${product.slug || product.id}`} className="block flex-1">
+      <Link
+        href={productHref}
+        prefetch={true}
+        onMouseEnter={prefetchProduct}
+        onFocus={prefetchProduct}
+        className="block flex-1"
+      >
         {/* Product Image Container */}
         <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
           {!imgError ? (

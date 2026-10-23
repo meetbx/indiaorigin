@@ -5,6 +5,12 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { CheckCircle2, Building2, PackageX, Gem, Sparkles } from 'lucide-react';
 
+function getOptimizedCloudinaryUrl(url: string, transformation: string) {
+  if (!url || !url.includes("res.cloudinary.com")) return url;
+  if (url.includes(transformation)) return url;
+  return url.replace("/upload/", `/upload/${transformation}/`);
+}
+
 interface ManufacturerSummary {
   id: string;
   name: string;
@@ -148,7 +154,8 @@ export default function RecommendationsSection({ productId, slug }: Recommendati
 
 function ProductCard({ product }: { product: RecommendedProduct }) {
   const [imgError, setImgError] = useState(false);
-  const primaryImage = product.images?.[0] || '/placeholder-product.png';
+  const rawImage = product.images?.[0] || '/placeholder-product.png';
+  const primaryImage = getOptimizedCloudinaryUrl(rawImage, "f_auto,q_auto,c_limit,w_400");
 
   const validMin = typeof product.minPrice === 'number' && Number.isFinite(product.minPrice) && product.minPrice > 0;
   const validMax = typeof product.maxPrice === 'number' && Number.isFinite(product.maxPrice) && product.maxPrice > product.minPrice;
@@ -198,11 +205,12 @@ function ProductCard({ product }: { product: RecommendedProduct }) {
       <div>
         <div className="w-32 h-32 bg-slate-100 rounded-xl mb-2 relative overflow-hidden flex items-center justify-center border border-slate-200/60">
           {!imgError ? (
-            <Image
+<Image
               src={primaryImage}
               alt={product.name || 'Product'}
               fill
-              sizes="128px"
+              sizes="(max-width: 768px) 128px, 128px"
+              loading="lazy"
               className="object-cover group-hover:scale-105 transition duration-300"
               onError={() => setImgError(true)}
             />

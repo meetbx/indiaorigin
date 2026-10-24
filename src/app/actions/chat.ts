@@ -2,7 +2,6 @@
 
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
 import { authOptions } from "@/lib/auth";
 // import { getSessionUserId } from "@/lib/auth"; // Adjust to your actual session utility
 import { v2 as cloudinary } from "cloudinary";
@@ -135,8 +134,6 @@ export async function saveServerMessage(conversationId: string, content: string)
     data: { lastMessageAt: new Date() },
   });
 
-  revalidatePath(`/messages`);
-  revalidatePath(`/manufacturer/messages`);
   return savedMessage;
 }
 
@@ -211,47 +208,34 @@ export async function sendMediaMessage(conversationId: string, formData: FormDat
     throw new Error("Message cannot be empty");
   }
 
-  const attachmentData = [];
-
-  for (const file of files) {
-    const validImageTypes = ["image/jpeg", "image/png", "image/webp"];
+  const validImageTypes = ["image/jpeg", "image/png", "image/webp"];
+  const validatedFiles = files.map((file) => {
     const isPdf = file.type === "application/pdf";
     const isImage = validImageTypes.includes(file.type);
-
-    if (!isImage && !isPdf) {
-      throw new Error(`Unsupported file type: ${file.type}`);
-    }
-
+    if (!isImage && !isPdf) throw new Error(`Unsupported file type: ${file.type}`);
     const maxSize = isPdf ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      throw new Error(`File ${file.name} exceeds size limit.`);
-    }
+    if (file.size > maxSize) throw new Error(`File ${file.name} exceeds size limit.`);
+    return { file, isPdf };
+  });
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
+  // Independent attachments upload concurrently instead of serially.
+  const attachmentData = await Promise.all(validatedFiles.map(async ({ file, isPdf }) => {
+    const buffer = Buffer.from(await file.arrayBuffer());
     const uploadResult: any = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: "indiaorigin_chat_attachments",
-          resource_type: isPdf ? "raw" : "image",
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
+        { folder: "indiaorigin_chat_attachments", resource_type: isPdf ? "raw" : "image" },
+        (error, result) => { if (error) reject(error); else resolve(result); }
       );
       uploadStream.end(buffer);
     });
-
-    attachmentData.push({
+    return {
       fileUrl: uploadResult.secure_url,
       fileName: file.name,
       fileSize: file.size,
       mimeType: file.type,
       type: isPdf ? ("PDF" as const) : ("IMAGE" as const),
-    });
-  }
+    };
+  }));
 
 const savedMessage = await prisma.message.create({
     data: {
@@ -276,7 +260,5 @@ const savedMessage = await prisma.message.create({
     data: { lastMessageAt: new Date() },
   });
 
-  revalidatePath(`/messages`);
-  revalidatePath(`/manufacturer/messages`);
   return savedMessage;
 }

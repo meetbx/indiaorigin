@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { getBuyerConversations, getConversationMessages, saveServerMessage , sendMediaMessage } from "@/app/actions/chat";
+import { getBuyerConversations, getConversationMessages, saveServerMessage, sendMediaMessage } from "@/app/actions/chat";
 import { Send, ArrowLeft, Store, MessageSquare , Paperclip, FileText, X, Download } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -16,6 +16,8 @@ function MessagesContent() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [activeConv, setActiveConv] = useState<any | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
+  const messageCacheRef = useRef<Map<string, any[]>>(new Map());
+  const loadRequestRef = useRef(0);
   const [inputText, setInputText] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
@@ -32,6 +34,7 @@ function MessagesContent() {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
       setSelectedFiles((prev) => [...prev, ...newFiles]);
+      e.target.value = "";
     }
   };
 
@@ -40,65 +43,80 @@ function MessagesContent() {
   };
 
   useEffect(() => {
-    getBuyerConversations().then((data) => {
-      setConversations(data);
-      if (data.length > 0) {
-        const matched = targetConvId 
-          ? data.find((c) => c.id === targetConvId) || (window.innerWidth >= 768 ? data[0] : null)
-          : (window.innerWidth >= 768 ? data[0] : null);
-        if (matched) {
-          handleSelectConversation(matched);
+    let cancelled = false;
+    getBuyerConversations()
+      .then((data) => {
+        if (cancelled) return;
+        setConversations(data);
+        if (data.length > 0) {
+          const matched = targetConvId
+            ? data.find((c) => c.id === targetConvId) || (window.innerWidth >= 768 ? data[0] : null)
+            : (window.innerWidth >= 768 ? data[0] : null);
+          if (matched) void handleSelectConversation(matched);
         }
-      }
-    });
+      })
+      .catch((error) => console.error("Failed to load conversations", error));
+    return () => { cancelled = true; };
   }, [targetConvId]);
 
   useEffect(() => {
     if (!activeConv?.id || !currentUserId) return;
 
-    const realtime = new Ably.Realtime({
-      authUrl: "/api/ably/auth",
-    });
-    ablyRealtimeRef.current = realtime;
+    // Reuse one Ably connection while switching conversations; only the channel changes.
+    let realtime = ablyRealtimeRef.current;
+    if (!realtime) {
+      realtime = new Ably.Realtime({ authUrl: "/api/ably/auth" });
+      ablyRealtimeRef.current = realtime;
+    }
 
     const channel = realtime.channels.get(`conv_${activeConv.id}`);
     channelRef.current = channel;
 
-    channel.subscribe("new_message", (message) => {
+    const onNewMessage = (message: any) => {
       const newMsg = message.data;
       setMessages((prev) => {
-        // Prevent duplicate entries if already added via optimistic update or prior event
         if (prev.some((m) => m.id === newMsg.id)) return prev;
-        
-        // If the incoming Ably message matches content and sender from an optimistic message, replace it
         const optimisticIndex = prev.findIndex(
           (m) => m.isOptimistic && m.senderId === newMsg.senderId && m.content === newMsg.content
         );
-
         if (optimisticIndex !== -1) {
           const updated = [...prev];
           updated[optimisticIndex] = newMsg;
           return updated;
         }
-
         return [...prev, newMsg];
       });
-    });
+    };
 
+    channel.subscribe("new_message", onNewMessage);
     channel.attach();
 
     return () => {
-      if (channelRef.current) {
-        channelRef.current.unsubscribe();
-      }
-      realtime.close();
+      channel.unsubscribe("new_message", onNewMessage);
+      if (channelRef.current === channel) channelRef.current = null;
+      // Keep the Ably connection alive so opening another chat doesn't reconnect.
     };
   }, [activeConv?.id, currentUserId]);
 
+  useEffect(() => {
+    return () => {
+      ablyRealtimeRef.current?.close();
+      ablyRealtimeRef.current = null;
+    };
+  }, []);
+
   const handleSelectConversation = async (conv: any) => {
+    // Show cached messages immediately while refreshing them in the background.
     setActiveConv(conv);
+    const cached = messageCacheRef.current.get(conv.id);
+    if (cached) setMessages(cached);
+    else setMessages([]);
+
+    const requestId = ++loadRequestRef.current;
     try {
       const res = await getConversationMessages(conv.id);
+      messageCacheRef.current.set(conv.id, res.messages);
+      if (requestId !== loadRequestRef.current) return;
       setMessages(res.messages);
       setCurrentUserId(res.currentUserId);
     } catch (e) {
@@ -107,37 +125,38 @@ function MessagesContent() {
   };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+    if (activeConv?.id) messageCacheRef.current.set(activeConv.id, messages);
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+  }, [messages, isTyping, activeConv?.id]);
 
   
-  // Replace handleSendMessage with:
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!inputText.trim() && selectedFiles.length === 0) || !activeConv || !currentUserId || isUploading) return;
 
+    const conversationId = activeConv.id as string;
     const contentCopy = inputText.trim();
     const filesCopy = [...selectedFiles];
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     setInputText("");
     setSelectedFiles([]);
     setIsUploading(true);
 
-    const tempId = `temp-${Date.now()}-${Math.random()}`;
     const optimisticMessage = {
       id: tempId,
-      conversationId: activeConv.id,
+      conversationId,
       senderId: currentUserId,
       content: contentCopy || null,
       isRead: false,
       createdAt: new Date().toISOString(),
-      attachments: filesCopy.map((f, idx) => ({
-        id: `temp-att-${idx}`,
-        fileUrl: URL.createObjectURL(f),
-        fileName: f.name,
-        fileSize: f.size,
-        mimeType: f.type,
-        type: f.type === "application/pdf" ? "PDF" : "IMAGE",
+      attachments: filesCopy.map((file, idx) => ({
+        id: `temp-att-${tempId}-${idx}`,
+        fileUrl: URL.createObjectURL(file),
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+        type: file.type === "application/pdf" ? "PDF" : "IMAGE",
       })),
       isOptimistic: true,
     };
@@ -145,26 +164,34 @@ function MessagesContent() {
     setMessages((prev) => [...prev, optimisticMessage]);
 
     try {
-      const formData = new FormData();
-      formData.append("content", contentCopy);
-      filesCopy.forEach((file) => formData.append("files", file));
-
-      const savedMessage = await sendMediaMessage(activeConv.id, formData);
-      
-      if (channelRef.current && savedMessage) {
-        await channelRef.current.publish("new_message", savedMessage);
+      // Text-only messages avoid FormData/media processing entirely.
+      let savedMessage: any;
+      if (filesCopy.length === 0) {
+        savedMessage = await saveServerMessage(conversationId, contentCopy);
+      } else {
+        const formData = new FormData();
+        formData.append("content", contentCopy);
+        filesCopy.forEach((file) => formData.append("files", file));
+        savedMessage = await sendMediaMessage(conversationId, formData);
       }
 
-      setMessages((prev) =>
-        prev.map((msg) => (msg.id === tempId ? savedMessage : msg))
-      );
+      // Publish only after persistence succeeds. Other participants receive it via Ably.
+      const realtime = ablyRealtimeRef.current;
+      const channel = realtime?.channels.get(`conv_${conversationId}`);
+      if (channel && savedMessage) await channel.publish("new_message", savedMessage);
+
+      setMessages((prev) => prev.map((msg) => msg.id === tempId ? savedMessage : msg));
+      messageCacheRef.current.set(conversationId, [
+        ...(messageCacheRef.current.get(conversationId) || []).filter((msg) => msg.id !== tempId),
+        savedMessage,
+      ]);
+      setConversations((prev) => prev.map((conv) => conv.id === conversationId
+        ? { ...conv, messages: [savedMessage], lastMessageAt: savedMessage.createdAt }
+        : conv));
+      optimisticMessage.attachments.forEach((attachment: any) => URL.revokeObjectURL(attachment.fileUrl));
     } catch (err) {
       console.error("Failed to send message", err);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === tempId ? { ...msg, hasError: true } : msg
-        )
-      );
+      setMessages((prev) => prev.map((msg) => msg.id === tempId ? { ...msg, hasError: true } : msg));
     } finally {
       setIsUploading(false);
     }
@@ -255,7 +282,7 @@ function MessagesContent() {
               {messages.map((msg) => {
                 const isMe = msg.senderId === currentUserId;
                 return (
-                  <div key={msg.id || Math.random()} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                  <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                     <div
                       className={`max-w-[80%] md:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-xs ${
                         isMe 

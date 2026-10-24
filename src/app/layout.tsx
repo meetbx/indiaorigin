@@ -8,8 +8,12 @@ import AuthProvider from "@/components/providers/AuthProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "BharatTrade - B2B Manufacturing Marketplace",
-  description: "Connect with verified Indian manufacturers and buy industrial products direct from source.",
+  title: "The India Origin | Connecting Global Buyers with Verified Indian Manufacturers",
+  description: "Direct-from-source B2B marketplace bridging verified Indian manufacturers with global wholesale buyers.",
+  icons: {
+    icon: "/favicon/favicon.ico",
+    apple: "/favicon/apple-touch-icon.png",
+  },
 };
 export const viewport: Viewport = {
   width: 'device-width',

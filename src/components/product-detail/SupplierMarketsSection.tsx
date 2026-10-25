@@ -3,11 +3,6 @@ import { MarketShare } from "@/lib/product-normalizer";
 interface MarketsSectionProps {
   markets: MarketShare[];
 }
-// Define it locally if it isn't exported from the normalizer:
-export interface MarketShare {
-  region: string;
-  percentage: number;
-}
 
 export default function SupplierMarketsSection({ markets }: MarketsSectionProps) {
   if (!markets || markets.length === 0) return null;

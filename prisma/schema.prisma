@@ -69,13 +69,18 @@ model Location {
 }
 
 model Category {
-  id        String    @id @default(cuid())
+  id        String     @id @default(cuid())
   name      String
-  slug      String    @unique
+  slug      String     @unique
   icon      String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  parentId  String?    
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  children  Category[] @relation("CategoryHierarchy")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   products  Product[]
+
+  @@index([parentId])
 }
 
 model Manufacturer {
@@ -158,6 +163,7 @@ model Product {
   @@index([name(ops: raw("gin_trgm_ops"))], map: "Product_name_trgm_idx", type: Gin)
   @@index([name(ops: raw("gin_trgm_ops"))], map: "idx_product_name_trgm", type: Gin)
   @@index([specifications], map: "idx_product_specifications_gin", type: Gin)
+  
 }
 
 model ProductReview {

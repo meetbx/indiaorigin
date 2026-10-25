@@ -2,7 +2,7 @@
 import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Home, LayoutGrid, MessageSquare, ShoppingCart, User,FileText } from 'lucide-react';
+import { Home, LayoutGrid, MessageSquare, ShoppingCart, User,FileText ,Search} from 'lucide-react';
 
 function BottomNavContent(){
   const pathname = usePathname();
@@ -11,7 +11,8 @@ function BottomNavContent(){
 
   const navItems = [
     { label: 'Home', href: '/', icon: Home },
-    { label: 'Categories', href: '/categories', icon: LayoutGrid },
+    { label: 'Search', href: '/search', icon: Search },
+  /*  { label: 'Categories', href: '/categories', icon: LayoutGrid },*/
     { label: 'Messages', href: '/messages', icon: MessageSquare },
     { label: 'Rfq', href: '/rfq', icon: FileText },
     { label: 'Account', href: '/account', icon: User },

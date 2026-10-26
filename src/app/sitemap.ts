@@ -6,7 +6,9 @@ import { prisma } from "@/lib/prisma";
 // queries during the production build.
 export const dynamic = "force-dynamic";
 
-const BASE_URL = "https://www.theindiaorigin.com";
+
+const BASE_URL = "https://theindiaorigin.com";
+
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [products, manufacturers, categories] = await Promise.all([

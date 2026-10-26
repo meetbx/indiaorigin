@@ -54,12 +54,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     openGraph: {
       title,
       description,
-      url: `https://theindiaorigin.com/products/${slug}`,
+      url: `https://www.theindiaorigin.com/products/${slug}`,
       images: [{ url: imageUrl }],
       type: 'website',
     },
     alternates: {
-      canonical: `https://theindiaorigin.com/products/${slug}`,
+      canonical: `https://www.theindiaorigin.com/products/${slug}`,
     },
   };
 }
@@ -105,7 +105,7 @@ const productJsonLd = {
   "@context": "https://schema.org",
   "@type": "Product",
   name: data.name,
-  url: `https://theindiaorigin.com/products/${data.slug}`,
+  url: `https://www.theindiaorigin.com/products/${data.slug}`,
 
   ...(Array.isArray(data.images) &&
   data.images.some(
@@ -141,7 +141,7 @@ const productJsonLd = {
     ? {
         offers: {
           "@type": "AggregateOffer",
-          url: `https://theindiaorigin.com/products/${data.slug}`,
+          url: `https://www.theindiaorigin.com/products/${data.slug}`,
           priceCurrency: "INR",
           lowPrice: data.pricing.minPrice,
           highPrice: data.pricing.maxPrice,

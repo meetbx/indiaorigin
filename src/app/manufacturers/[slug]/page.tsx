@@ -41,11 +41,11 @@ export async function generateMetadata({ params }: PageProps) {
     title,
     description,
     alternates: {
-      canonical: `https://theindiaorigin.com/manufacturers/${slug}`,
+      canonical: `https://www.theindiaorigin.com/manufacturers/${slug}`,
     },
     openGraph: {
       type: "website",
-      url: `https://theindiaorigin.com/manufacturers/${slug}`,
+      url: `https://www.theindiaorigin.com/manufacturers/${slug}`,
       title,
       description,
       siteName: "The India Origin",

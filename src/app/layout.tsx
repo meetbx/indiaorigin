@@ -6,7 +6,7 @@ import AuthProvider from "@/components/providers/AuthProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
-const BASE_URL = "https://theindiaorigin.com";
+const BASE_URL = "https://www.theindiaorigin.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),

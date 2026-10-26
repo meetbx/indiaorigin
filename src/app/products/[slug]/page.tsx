@@ -90,41 +90,61 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const productBlocks = Array.isArray(data.details) ? data.details : [];
 
   // Construct structured data for AI discovery and Google Rich Results
-  const validPrices = (data.pricing ?? [])
-  .map((item) => Number(item.price))
-  .filter((price) => Number.isFinite(price) && price > 0);
+const validPrices = [
+  data.pricing.minPrice,
+  data.pricing.maxPrice,
+  data.pricing.samplePrice,
+].filter(
+  (price): price is number =>
+    typeof price === "number" &&
+    Number.isFinite(price) &&
+    price > 0
+);
 
 const productJsonLd = {
   "@context": "https://schema.org",
   "@type": "Product",
   name: data.name,
   url: `https://theindiaorigin.com/products/${data.slug}`,
-  image: Array.isArray(data.images)
-    ? data.images.filter(
-        (image): image is string =>
-          typeof image === "string" && image.startsWith("https://")
-      )
-    : [],
-  description:
-    rawProduct.description || `Product details for ${data.name}.`,
-  sku: rawProduct.id,
-  brand: {
-    "@type": "Brand",
-    name:
-      rawProduct.manufacturer?.companyName ||
-      rawProduct.manufacturer?.name ||
-      "The India Origin",
-  },
-  ...(validPrices.length > 0
+
+  ...(Array.isArray(data.images) &&
+  data.images.some(
+    (image) => typeof image === "string" && image.startsWith("https://")
+  )
+    ? {
+        image: data.images.filter(
+          (image): image is string =>
+            typeof image === "string" && image.startsWith("https://")
+        ),
+      }
+    : {}),
+
+  ...(rawProduct.description
+    ? { description: rawProduct.description }
+    : {}),
+
+  ...(rawProduct.id ? { sku: rawProduct.id } : {}),
+
+  ...(rawProduct.manufacturer?.name
+    ? {
+        brand: {
+          "@type": "Brand",
+          name: rawProduct.manufacturer.name,
+        },
+      }
+    : {}),
+
+  ...(typeof data.pricing.minPrice === "number" &&
+  data.pricing.minPrice > 0 &&
+  typeof data.pricing.maxPrice === "number" &&
+  data.pricing.maxPrice >= data.pricing.minPrice
     ? {
         offers: {
           "@type": "AggregateOffer",
           url: `https://theindiaorigin.com/products/${data.slug}`,
           priceCurrency: "INR",
-          lowPrice: Math.min(...validPrices),
-          highPrice: Math.max(...validPrices),
-          offerCount: validPrices.length,
-          availability: "https://schema.org/InStock",
+          lowPrice: data.pricing.minPrice,
+          highPrice: data.pricing.maxPrice,
         },
       }
     : {}),

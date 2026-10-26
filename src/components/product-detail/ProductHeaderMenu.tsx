@@ -59,8 +59,8 @@ export default function ProductHeaderMenu({ productId, productTitle, productSlug
     setIsOpen(false);
     const shareUrl = typeof window !== "undefined" ? window.location.href : "";
     const shareData = {
-      title: productTitle || "IndiaOrigin.in Product",
-      text: `Check out ${productTitle} on IndiaOrigin.in`,
+      title: productTitle || "theindiaorigin.com Product",
+      text: `Check out ${productTitle} on theindiaorigin.com`,
       url: shareUrl,
     };
 

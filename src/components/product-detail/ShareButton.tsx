@@ -37,8 +37,8 @@ export default function ShareButton({ title, text, url, className }: ShareButton
     // Determine current canonical URL safely on the client
     const shareUrl = url || (typeof window !== "undefined" ? window.location.href : "");
     const shareData = {
-      title: title || "IndiaOrigin.in Product",
-      text: text || `Check out ${title} on IndiaOrigin.in`,
+      title: title || "theindiaorigin.com Product",
+      text: text || `Check out ${title} on theindiaorigin.com`,
       url: shareUrl,
     };
 

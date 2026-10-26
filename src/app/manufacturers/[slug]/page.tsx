@@ -9,16 +9,47 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps) {
   const { slug } = await params;
+
   const manufacturer = await prisma.manufacturer.findUnique({
     where: { slug },
-    select: { name: true, city: true },
+    select: {
+      name: true,
+      city: true,
+    },
   });
 
-  if (!manufacturer) return { title: "Manufacturer Not Found | BharatTrade" };
+  if (!manufacturer) {
+    return {
+      title: "Manufacturer Not Found | The India Origin",
+      robots: {
+        index: false,
+        follow: true,
+      },
+    };
+  }
+
+  const location = manufacturer.city?.trim();
+  const title = location
+    ? `${manufacturer.name} Manufacturer in ${location}`
+    : `${manufacturer.name} Manufacturer in India`;
+
+  const description = location
+    ? `Explore ${manufacturer.name}, a manufacturer based in ${location}, India. Discover its products and manufacturing capabilities on The India Origin.`
+    : `Explore ${manufacturer.name}, its products and manufacturing capabilities on The India Origin.`;
 
   return {
-    title: `${manufacturer.name} - Verified Manufacturer in ${manufacturer.city} | BharatTrade`,
-    description: `Direct manufacturer profile, factory capabilities, products, and certifications for ${manufacturer.name}.`,
+    title,
+    description,
+    alternates: {
+      canonical: `https://theindiaorigin.com/manufacturers/${slug}`,
+    },
+    openGraph: {
+      type: "website",
+      url: `https://theindiaorigin.com/manufacturers/${slug}`,
+      title,
+      description,
+      siteName: "The India Origin",
+    },
   };
 }
 

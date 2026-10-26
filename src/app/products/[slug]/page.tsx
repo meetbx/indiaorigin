@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Metadata } from "next";
+
 import { 
   ChevronLeft, Search, ShoppingCart, MoreHorizontal, 
   ChevronRight, Star, ShieldCheck, CheckCircle, Package, Store, Share2, SlidersHorizontal, Phone ,Send
@@ -38,14 +39,28 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const product = await prisma.product.findUnique({
     where: { slug },
-    select: { name: true, description: true },
+    select: { name: true, description: true, images: true },
   });
 
-  if (!product) return { title: "Product Not Found" };
+  if (!product) return { title: "Product Not Found | IndiaOrigin" };
+
+  const title = `${product.name} | IndiaOrigin`;
+  const description = product.description ?? `Source ${product.name} directly from verified Indian manufacturers on IndiaOrigin.`;
+  const imageUrl = Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : '/og-image.jpg';
 
   return {
-    title: `${product.name} - BharatTrade`,
-    description: product.description ?? `Buy ${product.name} on BharatTrade.`,
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `https://theindiaorigin.com/products/${slug}`,
+      images: [{ url: imageUrl }],
+      type: 'website',
+    },
+    alternates: {
+      canonical: `https://theindiaorigin.com/products/${slug}`,
+    },
   };
 }
 
@@ -74,9 +89,58 @@ export default async function ProductDetailPage({ params }: PageProps) {
   if (!data) notFound();
   const productBlocks = Array.isArray(data.details) ? data.details : [];
 
+  // Construct structured data for AI discovery and Google Rich Results
+  const validPrices = (data.pricing ?? [])
+  .map((item) => Number(item.price))
+  .filter((price) => Number.isFinite(price) && price > 0);
+
+const productJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: data.name,
+  url: `https://theindiaorigin.com/products/${data.slug}`,
+  image: Array.isArray(data.images)
+    ? data.images.filter(
+        (image): image is string =>
+          typeof image === "string" && image.startsWith("https://")
+      )
+    : [],
+  description:
+    rawProduct.description || `Product details for ${data.name}.`,
+  sku: rawProduct.id,
+  brand: {
+    "@type": "Brand",
+    name:
+      rawProduct.manufacturer?.companyName ||
+      rawProduct.manufacturer?.name ||
+      "The India Origin",
+  },
+  ...(validPrices.length > 0
+    ? {
+        offers: {
+          "@type": "AggregateOffer",
+          url: `https://theindiaorigin.com/products/${data.slug}`,
+          priceCurrency: "INR",
+          lowPrice: Math.min(...validPrices),
+          highPrice: Math.max(...validPrices),
+          offerCount: validPrices.length,
+          availability: "https://schema.org/InStock",
+        },
+      }
+    : {}),
+};
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-28 max-w-md mx-auto shadow-2xl border-x border-slate-200/60 font-sans">
       
+
+      {/* Inject Structured Data for AI & Search Crawlers */}
+<script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{
+    __html: JSON.stringify(productJsonLd).replace(/</g, "\\u003c"),
+  }}
+/>
       {/* HEADER */}
 
       <header className="bg-white/95 backdrop-blur-md px-4 py-3 flex items-center justify-between sticky top-0 z-40 border-b border-slate-100 gap-3 w-full shadow-2xs">

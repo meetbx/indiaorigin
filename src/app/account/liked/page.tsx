@@ -12,7 +12,7 @@ export default async function LikedProductsPage() {
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-20 max-w-md mx-auto shadow-2xl border-x border-slate-200/60 font-sans">
       {/* Header */}
       <header className="bg-white/95 backdrop-blur-md px-4 py-3.5 flex items-center gap-3 sticky top-0 z-40 border-b border-slate-100 shadow-2xs">
-        <Link href="/account" className="text-slate-800 hover:text-[#FF5500] transition-colors">
+        <Link href="/" className="text-slate-800 hover:text-[#FF5500] transition-colors">
           <ChevronLeft className="w-5 h-5 stroke-[2]" />
         </Link>
         <h1 className="text-base font-bold text-slate-900">Liked Products</h1>

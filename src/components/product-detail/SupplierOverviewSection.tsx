@@ -12,6 +12,7 @@ interface SupplierOverviewProps {
     slug: string;
     logo?: string | null; // Added logo field support
     yearsOnPlatform?: number;
+    gstNumber?: string | null;
     location?: {
       state?: string;
       country?: string;
@@ -59,6 +60,17 @@ export default function SupplierOverviewSection({ supplier }: SupplierOverviewPr
               </h4>
               <CheckCircle2 className="w-4 h-4 text-emerald-500 fill-emerald-500/20 shrink-0" />
             </div>
+
+            {/* Verified GSTIN Trust Badge */}
+{supplier.gstNumber && (
+  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 text-xs">
+    <span className="font-bold text-slate-700">GSTIN:</span>
+    <span className="font-mono text-slate-900 font-semibold">{supplier.gstNumber}</span>
+    <span className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 font-extrabold px-2 py-0.5 rounded-full">
+      ✓ TAX VERIFIED
+    </span>
+  </div>
+)}
 
             {/* Meta badges: Longevity & Location */}
             <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 font-normal flex-wrap">

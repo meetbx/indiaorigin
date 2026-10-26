@@ -12,6 +12,7 @@ export interface Manufacturer {
   badge?: "DIAMOND" | "GOLD" | "SILVER" | "NONE";
   logo?: string | null;
   certifications?: string[];
+  gstNumber?: string | null; // Add this
   location?: Location | null;
 }
 

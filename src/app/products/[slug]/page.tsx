@@ -192,15 +192,16 @@ export default async function ProductDetailPage({ params }: PageProps) {
         </div>
 
         {/* SECTION 8: SUPPLIER OVERVIEW */}
-        <SupplierOverviewSection 
-          supplier={{ 
-            ...data.supplier, 
-            id: rawProduct.manufacturer.id,
-            location: typeof data.supplier.location === "string" 
-              ? { state: data.supplier.location, country: "" } 
-              : data.supplier.location ?? undefined
-          }} 
-        />
+<SupplierOverviewSection 
+  supplier={{ 
+    ...data.supplier, 
+    id: rawProduct.manufacturer.id,
+    gstNumber: rawProduct.manufacturer.gstNumber, // <--- Add this line
+    location: typeof data.supplier.location === "string" 
+      ? { state: data.supplier.location, country: "" } 
+      : data.supplier.location ?? undefined
+  }} 
+/>
 
         {/* SECTION 9: MAIN MARKETS */}
         <div className="bg-white shadow-[0_1px_3px_rgba(0,0,0,0.02)]">

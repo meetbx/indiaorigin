@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Image from 'next/image';
+
 import Link from "next/link";
 import { Bell, Heart, Search, Mic } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -26,11 +28,18 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Top Branding Section */}
       <div className="max-w-7xl mx-auto px-4 pt-3 pb-2 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
-          <img 
-            src="/images/indiaorigin-logo.png" 
-            alt="IndiaOrigin B2B"
-            className="h-7 w-auto object-contain"
-          />
+<Image
+  src="/images/indiaorigin-logo.png"
+  alt="IndiaOrigin"
+  width={350}
+  height={70}
+  sizes="175px"
+  style={{
+    width: '175px',
+    height: '35px',
+    objectFit: 'contain',
+  }}
+/>
         </Link>
 
         <div className="flex items-center gap-2 sm:gap-3">

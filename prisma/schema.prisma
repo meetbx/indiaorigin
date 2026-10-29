@@ -306,10 +306,9 @@ model Conversation {
   product        Product?     @relation(fields: [productId], references: [id])
   messages       Message[]
 
-  @@unique([buyerId, manufacturerId])
-  @@index([buyerId])
+@@unique([buyerId, manufacturerId])
+  @@index([buyerId, lastMessageAt(sort: Desc)])
   @@index([manufacturerId])
-  @@index([lastMessageAt(sort: Desc)])
 }
 
 model Message {

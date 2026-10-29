@@ -151,8 +151,7 @@ const productJsonLd = {
 };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-28 max-w-md mx-auto shadow-2xl border-x border-slate-200/60 font-sans">
-      
+<div className="relative mx-auto min-h-screen w-full max-w-md overflow-x-clip border-x border-slate-200/60 bg-[#F8FAFC] pb-28 font-sans text-slate-900 shadow-2xl">      
 
       {/* Inject Structured Data for AI & Search Crawlers */}
 <script
@@ -310,8 +309,7 @@ const productJsonLd = {
       </main>
 
       {/* FLOATING ACTION BAR */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto action-bar-glass px-4 py-3.5 flex items-center gap-3 z-50">
-        {/* Chat Button */}
+<div className="action-bar-glass fixed inset-x-0 bottom-0 z-50 mx-auto flex w-full max-w-md items-center gap-3 px-4 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">        {/* Chat Button */}
         <div className="flex-1">
           <ChatButton productSlug={data.slug} />
         </div>

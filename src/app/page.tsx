@@ -1,175 +1,132 @@
-"use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { Header } from "@/components/layout/Header";
-import { FilterBar } from "@/components/marketplace/FilterBar";
-import { ProductGrid } from "@/components/marketplace/ProductGrid";
-import { FeaturedSection } from "@/components/marketplace/FeaturedSection";
-import { Product, ProductApiResponse } from "@/types/marketplace";
+import { prisma } from "@/lib/prisma";
+import type { Product } from "@/types/marketplace";
+import HomePageClient from "./HomePageClient";
 
-// In-memory cache survives client-side navigation away from and back to the home page.
-// sessionStorage provides a lightweight fallback after a full reload in the same tab.
-type HomeProductsCacheEntry = {
-  data: Product[];
-  hasMore: boolean;
-  page: number;
-  savedAt: number;
-};
-const homeProductsCache = new Map<string, HomeProductsCacheEntry>();
-const HOME_CACHE_TTL_MS = 2 * 60 * 1000;
-const homeCacheKey = (search: string, category: string) =>
-  `indiaorigin:home-products:v1:${encodeURIComponent(search.trim())}:${encodeURIComponent(category || "all")}`;
+export const revalidate = 60;
 
-function readHomeCache(key: string): HomeProductsCacheEntry | null {
-  const inMemory = homeProductsCache.get(key);
-  if (inMemory && Date.now() - inMemory.savedAt < HOME_CACHE_TTL_MS) return inMemory;
+export default async function HomePage() {
+  let initialProducts: Product[] = [];
+  let initialHasMore = false;
+  let initialError: string | null = null;
 
   try {
-    const raw = window.sessionStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as HomeProductsCacheEntry;
-    if (!parsed || !Array.isArray(parsed.data) || Date.now() - parsed.savedAt >= HOME_CACHE_TTL_MS) {
-      window.sessionStorage.removeItem(key);
-      return null;
-    }
-    homeProductsCache.set(key, parsed);
-    return parsed;
-  } catch {
-    // Storage may be disabled or full; the in-memory cache still works.
-    return null;
+    const rows = await prisma.product.findMany({
+      where: {
+        isPublished: true,
+      },
+      take: 13,
+      orderBy: [
+        { updatedAt: "desc" },
+        { id: "desc" },
+      ],
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        images: true,
+        minPrice: true,
+        maxPrice: true,
+        moq: true,
+        unit: true,
+        specifications: true,
+        inStock: true,
+        categoryId: true,
+        manufacturerId: true,
+        createdAt: true,
+        updatedAt: true,
+
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+
+        manufacturer: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            isVerified: true,
+            city: true,
+            badge: true,
+            logo: true,
+            gstNumber: true,
+            location: {
+              select: {
+                state: true,
+              },
+            },
+            certificationsList: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    initialHasMore = rows.length > 12;
+
+    initialProducts = rows.slice(0, 12).map((product) => ({
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      description: product.description ?? undefined,
+      images: product.images,
+      minPrice: product.minPrice,
+      maxPrice: product.maxPrice,
+      moq: product.moq,
+      unit: product.unit,
+      specifications:
+        product.specifications &&
+        typeof product.specifications === "object" &&
+        !Array.isArray(product.specifications)
+          ? (product.specifications as Record<string, string>)
+          : undefined,
+      inStock: product.inStock,
+      categoryId: product.categoryId,
+      manufacturerId: product.manufacturerId,
+      createdAt: product.createdAt.toISOString(),
+      updatedAt: product.updatedAt.toISOString(),
+
+      category: {
+        id: product.category.id,
+        name: product.category.name,
+        slug: product.category.slug,
+      },
+
+      manufacturer: {
+        id: product.manufacturer.id,
+        name: product.manufacturer.name,
+        slug: product.manufacturer.slug,
+        isVerified: product.manufacturer.isVerified,
+        city: product.manufacturer.city,
+        badge: product.manufacturer.badge,
+        logo: product.manufacturer.logo,
+        gstNumber: product.manufacturer.gstNumber,
+        certifications: product.manufacturer.certificationsList.map(
+          (certification) => certification.name
+        ),
+        location: {
+          state: product.manufacturer.location.state,
+        },
+      },
+    }));
+  } catch (error) {
+    console.error("Homepage product query failed:", error);
+    initialError = "Unable to load products. Please try again.";
   }
-}
-
-function writeHomeCache(key: string, entry: HomeProductsCacheEntry) {
-  homeProductsCache.set(key, entry);
-  try { window.sessionStorage.setItem(key, JSON.stringify(entry)); } catch { /* optional cache */ }
-}
-
-export default function HomePage() {
-  const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeTopTab, setActiveTopTab] = useState("products");
-  const [selectedCategory, setSelectedCategory] = useState("all");
-
-  const [products, setProducts] = useState<Product[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchProducts = useCallback(
-    async (isInitial = false, pageNum = 1) => {
-      const cacheKey = homeCacheKey(searchQuery, selectedCategory);
-      const cached = isInitial && pageNum === 1 ? readHomeCache(cacheKey) : null;
-
-      // If cached products exist, keep them visible and refresh quietly in the background.
-      setIsLoading(!cached);
-      setError(null);
-      if (cached) {
-        setProducts(cached.data);
-        setHasMore(cached.hasMore);
-        setPage(cached.page);
-      }
-
-      try {
-        const params = new URLSearchParams({
-          page: pageNum.toString(),
-          limit: "12",
-          search: searchQuery,
-          category: selectedCategory,
-        });
-
-        const res = await fetch(`/api/products?${params.toString()}`);
-        const result: ProductApiResponse = await res.json();
-
-        if (!result.success) {
-          throw new Error(result.error || "Failed to load products");
-        }
-
-        if (isInitial) {
-          setProducts(result.data);
-          writeHomeCache(cacheKey, {
-            data: result.data,
-            hasMore: result.pagination.hasMore,
-            page: result.pagination.page,
-            savedAt: Date.now(),
-          });
-        } else {
-          setProducts((prev) => [...prev, ...result.data]);
-        }
-
-        setHasMore(result.pagination.hasMore);
-        setPage(result.pagination.page);
-      } catch (err: any) {
-        // Don't replace a usable cached page with an error when only the refresh failed.
-        if (!cached) setError(err.message || "An unexpected error occurred.");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [searchQuery, selectedCategory]
-  );
-
-  useEffect(() => {
-    fetchProducts(true, 1);
-  }, [fetchProducts]);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-    } else {
-      router.push("/search");
-    }
-  };
-
-  const handleSearchClick = () => {
-    router.push(searchQuery ? `/search?q=${encodeURIComponent(searchQuery)}` : "/search");
-  };
-
-  const handleLoadMore = () => {
-    if (!isLoading && hasMore) {
-      fetchProducts(false, page + 1);
-    }
-  };
-
-  const handleClearFilters = () => {
-    setSearchQuery("");
-    setSelectedCategory("all");
-  };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-20 md:pb-10 font-sans">
-      <Header
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        onSearchSubmit={handleSearchSubmit}
-        onSearchClick={handleSearchClick}
-        activeTopTab={activeTopTab}
-        setActiveTopTab={setActiveTopTab}
-      />
-
-      <FilterBar
-        activeFilter=""
-        setActiveFilter={() => {}}
-        selectedCategory={selectedCategory}
-        setSelectedCategory={setSelectedCategory}
-      />
-
-      <main>
-        <ProductGrid
-          products={products}
-          isLoading={isLoading}
-          error={error}
-          hasMore={hasMore}
-          onLoadMore={handleLoadMore}
-          onRetry={() => fetchProducts(true, 1)}
-          onClearFilters={handleClearFilters}
-        />
-
-        <FeaturedSection />
-      </main>
-    </div>
+    <HomePageClient
+      initialProducts={initialProducts}
+      initialHasMore={initialHasMore}
+      initialError={initialError}
+    />
   );
 }

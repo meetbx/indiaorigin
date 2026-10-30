@@ -31,7 +31,10 @@ interface ProductGridProps {
   onClearFilters: () => void;
 }
 
-export const ProductCard: React.FC<{ product: Product }> = ({ product }) => {
+export const ProductCard: React.FC<{
+  product: Product;
+  preload?: boolean;
+}> = ({ product, preload = false }) => {
   const [imgError, setImgError] = useState(false);
   const router = useRouter();
   const productHref = `/products/${product.slug || product.id}`;
@@ -101,6 +104,7 @@ if (badge === "GOLD") {
               src={primaryImage}
               alt={product.name}
               fill
+              preload={preload}
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="object-cover group-hover:scale-105 transition-transform duration-500"
               onError={() => setImgError(true)}
@@ -200,9 +204,13 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
     <div className="max-w-7xl mx-auto px-4 py-4">
       {/* 2-Column Mobile | 3-Column Tablet | 4-Column Desktop */}
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-        {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
+{products.map((product, index) => (
+  <ProductCard
+    key={product.id}
+    product={product}
+    preload={index === 0}
+  />
+))}
 
         {isLoading &&
           Array.from({ length: 8 }).map((_, idx) => (

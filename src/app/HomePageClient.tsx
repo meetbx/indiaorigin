@@ -59,6 +59,7 @@ function readHomeCache(key: string): HomeProductsCacheEntry | null {
       Date.now() - parsed.savedAt >= HOME_CACHE_TTL_MS
     ) {
       window.sessionStorage.removeItem(key);
+      homeProductsCache.delete(key);
       return null;
     }
 
@@ -82,6 +83,24 @@ function writeHomeCache(
   }
 }
 
+function mergeUniqueProducts(
+  existing: Product[],
+  incoming: Product[]
+): Product[] {
+  const seen = new Set(existing.map((product) => product.id));
+
+  const merged = [...existing];
+
+  for (const product of incoming) {
+    if (!seen.has(product.id)) {
+      seen.add(product.id);
+      merged.push(product);
+    }
+  }
+
+  return merged;
+}
+
 export default function HomePageClient({
   initialProducts,
   initialHasMore,
@@ -99,10 +118,21 @@ export default function HomePageClient({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
 
-  // Store the server-rendered first page in the client cache.
+  // Keep the latest product list accessible to async operations.
+  const productsRef = useRef<Product[]>(initialProducts);
+
+  // Prevent outdated requests from overwriting newer results.
+  const requestIdRef = useRef(0);
+  const requestInFlightRef = useRef(false);
+
+  // Seed server-rendered products only if there is no valid cache.
+  // Never overwrite an existing valid cache with potentially stale props.
   useEffect(() => {
-    if (initialProducts.length > 0) {
-      writeHomeCache(homeCacheKey("", "all"), {
+    const key = homeCacheKey("", "all");
+    const existing = readHomeCache(key);
+
+    if (!existing && initialProducts.length > 0) {
+      writeHomeCache(key, {
         data: initialProducts,
         hasMore: initialHasMore,
         page: 1,
@@ -117,13 +147,20 @@ export default function HomePageClient({
       pageNum: number,
       signal?: AbortSignal
     ) => {
+      const requestId = ++requestIdRef.current;
+
+      requestInFlightRef.current = true;
+
       const cacheKey = homeCacheKey(searchQuery, selectedCategory);
+
       const cached =
         isFirstPage && pageNum === 1
           ? readHomeCache(cacheKey)
           : null;
 
+      // Display cached products immediately.
       if (cached) {
+        productsRef.current = cached.data;
         setProducts(cached.data);
         setHasMore(cached.hasMore);
         setPage(cached.page);
@@ -142,7 +179,10 @@ export default function HomePageClient({
 
         const response = await fetch(
           `/api/products?${params.toString()}`,
-          { signal }
+          {
+            signal,
+            cache: "no-store",
+          }
         );
 
         if (!response.ok) {
@@ -155,40 +195,59 @@ export default function HomePageClient({
           throw new Error(result.error || "Failed to load products");
         }
 
-        if (signal?.aborted) return;
+        // Ignore aborted or outdated responses.
+        if (
+          signal?.aborted ||
+          requestId !== requestIdRef.current
+        ) {
+          return;
+        }
+
+        let updatedProducts: Product[];
 
         if (isFirstPage) {
-          setProducts(result.data);
-
-          writeHomeCache(cacheKey, {
-            data: result.data,
-            hasMore: result.pagination.hasMore,
-            page: result.pagination.page,
-            savedAt: Date.now(),
-          });
+          updatedProducts = mergeUniqueProducts([], result.data);
         } else {
-          setProducts((previous) => [
-            ...previous,
-            ...result.data,
-          ]);
+          updatedProducts = mergeUniqueProducts(
+            productsRef.current,
+            result.data
+          );
         }
+
+        // Update the ref and React state together.
+        productsRef.current = updatedProducts;
+        setProducts(updatedProducts);
 
         setHasMore(result.pagination.hasMore);
         setPage(result.pagination.page);
+
+        // Save both first-page refreshes and Load More results.
+        writeHomeCache(cacheKey, {
+          data: updatedProducts,
+          hasMore: result.pagination.hasMore,
+          page: result.pagination.page,
+          savedAt: Date.now(),
+        });
       } catch (err) {
-        if (signal?.aborted) return;
+        if (
+          signal?.aborted ||
+          requestId !== requestIdRef.current
+        ) {
+          return;
+        }
 
         const message =
           err instanceof Error
             ? err.message
             : "An unexpected error occurred.";
 
-        // Keep cached products visible if a background refresh fails.
+        // Keep cached products visible if refresh fails.
         if (!cached) {
           setError(message);
         }
       } finally {
-        if (!signal?.aborted) {
+        if (requestId === requestIdRef.current) {
+          requestInFlightRef.current = false;
           setIsLoading(false);
         }
       }
@@ -196,35 +255,32 @@ export default function HomePageClient({
     [searchQuery, selectedCategory]
   );
 
-  // Fetch only when the search or category actually changes.
-  // Comparing the previous key also makes this safe under Strict Mode.
-  const previousFilterKey = useRef(
-    homeCacheKey("", "all")
-  );
-
+  // Always fetch page 1 on initial mount and when filters change.
+  // Cache is displayed first when available.
   useEffect(() => {
-    const currentKey = homeCacheKey(
-      searchQuery,
-      selectedCategory
-    );
-
-    if (previousFilterKey.current === currentKey) {
-      return;
-    }
-
-    previousFilterKey.current = currentKey;
-
     const controller = new AbortController();
 
-    const timeoutId = window.setTimeout(() => {
-      void fetchProducts(true, 1, controller.signal);
-    }, 250);
+    void fetchProducts(true, 1, controller.signal);
 
     return () => {
-      window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [searchQuery, selectedCategory, fetchProducts]);
+  }, [fetchProducts]);
+
+  // Refresh page 1 when the user returns using browser Back/Forward.
+  useEffect(() => {
+    const handlePopState = () => {
+      if (window.location.pathname === "/") {
+        void fetchProducts(true, 1);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [fetchProducts]);
 
   const handleSearchSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -249,13 +305,19 @@ export default function HomePageClient({
   };
 
   const handleLoadMore = () => {
-    if (!isLoading && hasMore) {
+    if (
+      !requestInFlightRef.current &&
+      !isLoading &&
+      hasMore
+    ) {
       void fetchProducts(false, page + 1);
     }
   };
 
   const handleRetry = () => {
-    void fetchProducts(true, 1);
+    if (!requestInFlightRef.current) {
+      void fetchProducts(true, 1);
+    }
   };
 
   const handleClearFilters = () => {

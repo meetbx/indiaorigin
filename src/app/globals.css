@@ -31,56 +31,69 @@ input, textarea, select {
   }
 
   /* Luxury Manufacturer Badge Gradients */
+/* Luxury Manufacturer Badge Gradients */
   .badge-diamond {
-
-
     background: linear-gradient(
-    120deg,
-    rgba(205, 240, 240, 0.55),
-    rgba(16, 230, 241, 0.479),
-    rgba(86, 200, 212, 0.895)
-  );
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  backdrop-filter: blur(16px) saturate(160%);
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.4),
-    0 2px 10px rgba(34, 211, 238, 0.2);
-    
+      120deg,
+      rgba(205, 240, 240, 0.55),
+      rgba(16, 230, 241, 0.479),
+      rgba(86, 200, 212, 0.895)
+    );
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    backdrop-filter: blur(16px) saturate(160%);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.4),
+      0 2px 10px rgba(34, 211, 238, 0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
   }
-
 
   .badge-gold {
     background: linear-gradient(135deg, #ded8b997 0%, #edb75aaf 50%, #efd13c 100%);
-     -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    backdrop-filter: blur(16px) saturate(150%);
     box-shadow: 0 2px 10px rgba(245, 158, 11, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-
     background-clip: padding-box;
-
-    
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
   }
-.badge-silver {
-  background: linear-gradient(
-    120deg,
-    rgba(226, 232, 240, 0.81) 0%,
-    rgba(152, 158, 166, 0.918) 50%,
-    rgba(99, 105, 113, 0.867) 100%
-  );
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
 
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.45),
-    0 2px 8px rgba(100, 116, 139, 0.15);
-
-  background-clip: padding-box;
-}
+  .badge-silver {
+    background: linear-gradient(
+      120deg,
+      rgba(226, 232, 240, 0.81) 0%,
+      rgba(152, 158, 166, 0.918) 50%,
+      rgba(99, 105, 113, 0.867) 100%
+    );
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    backdrop-filter: blur(16px) saturate(150%);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.45),
+      0 2px 8px rgba(100, 116, 139, 0.15);
+    background-clip: padding-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+  }
 
   .badge-verified {
     background: linear-gradient(135deg, #b5d9cc92 0%, #44cf9296 50%, #39d78d 100%);
-      -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    backdrop-filter: blur(16px) saturate(150%);
     box-shadow: 0 2px 10px rgba(115, 245, 204, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
   }
   
   /* Glassmorphic Action Bar Utilities */

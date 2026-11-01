@@ -3,49 +3,49 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  // 1. Upsert Main Category using its unique ID in the `where` clause
+  // 1. Upsert Main Category using its unique ID
   const mainCategory = await prisma.category.upsert({
-    where: { id: 'cmuco0tnv0002ts1kwdbl1bw3' },
+    where: { id: 'cmv6vcmay001atsxsmne4fhp5' },
     update: {
-      name: 'Industrial Machinery & Equipment',
-      slug: 'industrial-machinery-equipment',
+      name: 'Sports Goods, Games, Toys & Accessories',
+      slug: 'sports-goods-games-toys-accessories',
     },
     create: {
-      id: 'cmuco0tnv0002ts1kwdbl1bw3',
-      name: 'Industrial Machinery & Equipment',
-      slug: 'industrial-machinery-equipment',
+      id: 'cmv6vcmay001atsxsmne4fhp5',
+      name: 'Sports Goods, Games, Toys & Accessories',
+      slug: 'sports-goods-games-toys-accessories',
     },
   });
 
-  // 2. Upsert Subcategory: Material Handling & Conveyor Systems
+  // 2. Upsert Subcategory: Outdoor Play & Sports Toys
   const subCategory = await prisma.category.upsert({
-    where: { slug: 'material-handling-conveyor-systems' },
+    where: { slug: 'indoor-play-toys' },
     update: {
-      name: 'Material Handling & Conveyor Systems',
+      name: 'indoor Play & Toys',
       parentId: mainCategory.id,
     },
     create: {
-      name: 'Material Handling & Conveyor Systems',
-      slug: 'material-handling-conveyor-systems',
+      name: 'indoor Play & Toys',
+      slug: 'indoor-play-toys',
       parentId: mainCategory.id,
     },
   });
 
-  // 3. Upsert Child Category: Belt Conveyors & Systems
+  // 3. Upsert Child Category: Toy Guns & Blasters
   await prisma.category.upsert({
-    where: { slug: 'belt-conveyors-systems' },
+    where: { slug: 'toy-guns-blasters' },
     update: {
-      name: 'Belt Conveyors & Systems',
+      name: 'Toy Guns & Blasters',
       parentId: subCategory.id,
     },
     create: {
-      name: 'Belt Conveyors & Systems',
-      slug: 'belt-conveyors-systems',
+      name: 'Toy Guns & Blasters',
+      slug: 'toy-guns-blasters',
       parentId: subCategory.id,
     },
   });
 
-  console.log('Industrial Machinery categories seeded successfully!');
+  console.log('Meteor Gun categories seeded successfully!');
 }
 
 main()

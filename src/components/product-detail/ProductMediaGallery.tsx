@@ -113,7 +113,7 @@ export default function ProductMediaGallery({
     <div className="relative w-full aspect-square bg-white border-b border-slate-200 group overflow-hidden">
       {/* Badge Indicator */}
 {badge && badge !== "NONE" && (
-  <div className="absolute top-3 left-3 z-20 pointer-events-none">
+  <div className="absolute top-4 left-4 z-20 pointer-events-none">
     <BadgeDisplay badge={badge as BadgeType} />
   </div>
       )}

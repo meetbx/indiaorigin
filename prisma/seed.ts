@@ -3,48 +3,49 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  // 1. Upsert Main Category
+  // 1. Upsert Main Category using its unique ID in the `where` clause
   const mainCategory = await prisma.category.upsert({
-    where: { slug: 'sports-goods-games-toys-accessories' },
+    where: { id: 'cmuco0tnv0002ts1kwdbl1bw3' },
     update: {
-      name: 'Sports Goods, Games, Toys & Accessories',
+      name: 'Industrial Machinery & Equipment',
+      slug: 'industrial-machinery-equipment',
     },
     create: {
-      id: 'cmv6vcmay001atsxsmne4fhp5',
-      name: 'Sports Goods, Games, Toys & Accessories',
-      slug: 'sports-goods-games-toys-accessories',
+      id: 'cmuco0tnv0002ts1kwdbl1bw3',
+      name: 'Industrial Machinery & Equipment',
+      slug: 'industrial-machinery-equipment',
     },
   });
 
-  // 2. Upsert Subcategory: Educational & Learning Toys
+  // 2. Upsert Subcategory: Material Handling & Conveyor Systems
   const subCategory = await prisma.category.upsert({
-    where: { slug: 'educational-learning-toys' },
+    where: { slug: 'material-handling-conveyor-systems' },
     update: {
-      name: 'Educational & Learning Toys',
+      name: 'Material Handling & Conveyor Systems',
       parentId: mainCategory.id,
     },
     create: {
-      name: 'Educational & Learning Toys',
-      slug: 'educational-learning-toys',
+      name: 'Material Handling & Conveyor Systems',
+      slug: 'material-handling-conveyor-systems',
       parentId: mainCategory.id,
     },
   });
 
-  // 3. Upsert Child Category: Building Blocks & Construction Toys
+  // 3. Upsert Child Category: Belt Conveyors & Systems
   await prisma.category.upsert({
-    where: { slug: 'building-blocks-construction-toys' },
+    where: { slug: 'belt-conveyors-systems' },
     update: {
-      name: 'Building Blocks & Construction Toys',
+      name: 'Belt Conveyors & Systems',
       parentId: subCategory.id,
     },
     create: {
-      name: 'Building Blocks & Construction Toys',
-      slug: 'building-blocks-construction-toys',
+      name: 'Belt Conveyors & Systems',
+      slug: 'belt-conveyors-systems',
       parentId: subCategory.id,
     },
   });
 
-  console.log('Categories seeded successfully!');
+  console.log('Industrial Machinery categories seeded successfully!');
 }
 
 main()

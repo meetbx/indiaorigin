@@ -38,14 +38,14 @@ export default function SupplierOverviewSection({ supplier }: SupplierOverviewPr
       >
         {/* HEADER ROW: LOGO & NAME */}
         <div className="flex items-center gap-3">
-          {/* Company Logo or Fallback Icon */}
+{/* Company Logo or Fallback Icon */}
           <div className="w-12 h-12 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center shrink-0 overflow-hidden relative shadow-2xs">
             {supplier.logo ? (
               <Image 
                 src={supplier.logo} 
                 alt={supplier.name || "Supplier Logo"} 
                 fill 
-                className="object-cover"
+                className="object-contain p-1"
               />
             ) : (
               <Building2 className="w-6 h-6 text-indigo-600 stroke-[1.75]" />

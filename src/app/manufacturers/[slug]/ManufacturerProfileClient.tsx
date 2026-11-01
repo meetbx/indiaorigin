@@ -703,7 +703,7 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
                           </h3>
                           <div className="mt-2">
                             <span className="text-xs font-extrabold text-[#059669] block">
-                              ₹{product.minPrice} - ₹{product.maxPrice}
+                              ₹{product.minPrice}
                             </span>
                             {product.moq && <span className="text-[10px] text-gray-400">MOQ: {product.moq}</span>}
                           </div>

@@ -109,21 +109,14 @@ export default function ProductPricingSection({
             );
           })
         ) : (
-          <div className="min-w-0">
+<div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-1 text-slate-900">
               <span className="text-xs font-bold sm:text-sm">₹</span>
-              <span
-                className={`${getPriceFontSize(
-                  priceRange
-                    ? `${minPrice!.toLocaleString("en-IN")}-${maxPrice!.toLocaleString("en-IN")}`
-                    : (singlePrice ?? 0).toLocaleString("en-IN")
-                )} font-extrabold leading-tight tracking-tight`}
-              >
-                {priceRange
-                  ? `${minPrice!.toLocaleString("en-IN")}–₹${maxPrice!.toLocaleString("en-IN")}`
-                  : (singlePrice ?? 0).toLocaleString("en-IN")}
+              <span className={`${getPriceFontSize((minPrice ?? 0).toLocaleString("en-IN"))} font-extrabold leading-tight tracking-tight`}>
+                {(minPrice ?? 0).toLocaleString("en-IN")}
               </span>
-            </div>
+            
+          </div>
 
             {moq > 0 && (
               <p className="mt-1 text-[10px] leading-snug text-slate-500 sm:text-xs">

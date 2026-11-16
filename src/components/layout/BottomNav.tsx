@@ -23,7 +23,8 @@ if (pathname?.startsWith("/products/")) {
     return null;
   }
 
-  if (pathname?.startsWith("/messages")) {
+// Only hide bottom nav on mobile if an active conversation is open
+  if (pathname?.startsWith("/messages") && searchParams.get("conversationId")) {
     return null;
   }
 
@@ -38,6 +39,7 @@ if (pathname?.startsWith("/products/")) {
             <Link
               key={item.label}
               href={item.href}
+              prefetch={item.href === '/messages' ? true : undefined}
               className={`flex flex-col items-center justify-center relative ${
                 isActive ? 'text-[#FF6B00]' : 'text-gray-500 hover:text-gray-700'
               }`}

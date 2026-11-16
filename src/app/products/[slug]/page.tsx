@@ -310,9 +310,14 @@ const productJsonLd = {
 
       {/* FLOATING ACTION BAR */}
 <div className="action-bar-glass fixed inset-x-0 bottom-0 z-50 mx-auto flex w-full max-w-md items-center gap-3 px-4 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">        {/* Chat Button */}
-        <div className="flex-1">
-          <ChatButton productSlug={data.slug} />
-        </div>
+{/* Chat Button */}
+<div className="flex-1">
+  <ChatButton 
+    productSlug={data.slug} 
+    manufacturerId={rawProduct.manufacturerId} 
+    productId={rawProduct.id} 
+  />
+</div>
         
         {/* Call Now Button (Direct Mobile Dialer) */}
         {rawProduct.manufacturer?.phone ? (

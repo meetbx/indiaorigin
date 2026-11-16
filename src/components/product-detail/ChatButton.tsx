@@ -4,7 +4,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthAction } from "@/hooks/useAuthAction";
-import { getOrCreateConversation, getProductForChat } from "@/app/actions/chat";
 import { MessageSquareMore } from "lucide-react";
 
 interface ChatButtonProps {
@@ -21,37 +20,14 @@ export default function ChatButton({ productSlug, manufacturerId, productId }: C
   const handleChatClick = async () => {
     executeProtectedAction(
       { action: "open_chat", slug: productSlug },
-      async () => {
-        try {
-          setLoading(true);
-
-          let targetManufacturerId = manufacturerId;
-          let targetProductId = productId;
-
-          if (!targetManufacturerId) {
-            const product = await getProductForChat(productSlug);
-            targetManufacturerId = product?.manufacturerId;
-            targetProductId = product?.id;
-          }
-
-          if (!targetManufacturerId) {
-            console.error("Manufacturer ID could not be found for product slug:", productSlug);
-            router.push("/messages");
-            return;
-          }
-
-          const conversation = await getOrCreateConversation(targetManufacturerId, targetProductId);
-
-          if (conversation?.id) {
-            router.push(`/messages?conversationId=${conversation.id}`);
-          } else {
-            router.push("/messages");
-          }
-        } catch (err) {
-          console.error("Failed to initiate chat session:", err);
-          router.push("/messages");
-        } finally {
-          setLoading(false);
+      () => {
+        // INSTANT NAVIGATION: Go to messages right away using available props or product slug
+        setLoading(true);
+        if (manufacturerId) {
+          router.push(`/messages?manufacturerId=${manufacturerId}&productId=${productId || ""}`);
+        } else {
+          // Fallback if IDs aren't pre-loaded on the button
+          router.push(`/messages?slug=${productSlug}`);
         }
       }
     );

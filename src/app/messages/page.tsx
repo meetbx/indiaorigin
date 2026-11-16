@@ -25,71 +25,29 @@ export default async function BuyerMessagesPage({
   try {
     const convRes = await getBuyerConversations(20);
     initialConversations = convRes?.items || [];
+    
+    // Grab currentUserId from the first conversation or a quick sample
+    if (initialConversations.length > 0) {
+      const sampleMsgRes = await getConversationMessages(initialConversations[0].id, 1);
+      initialCurrentUserId = sampleMsgRes?.currentUserId || null;
+    }
 
     let matched: any = null;
 
     if (targetConvId) {
       matched = initialConversations.find((c: any) => c.id === targetConvId) || null;
-    }
+    } else if (targetManufacturerId) {
+      // 1. Check if an existing conversation already exists in the fetched list
+      matched = initialConversations.find((c: any) => c.manufacturerId === targetManufacturerId);
 
-    // If a specific conversation or message payload exists, fetch messages to grab currentUserId securely
-    if (matched) {
-      const msgRes = await getConversationMessages(matched.id, 20);
-      initialMessages = msgRes?.items || [];
-      initialHasMoreMessages = msgRes?.hasMore || false;
-      initialOldestSequence = msgRes?.nextCursor;
-      initialCurrentUserId = msgRes?.currentUserId || null;
-    }
-
-    // If clicking "Chat now" with a manufacturerId or slug, we need the buyer's ID to upsert the conversation
-    if ((targetManufacturerId || targetSlug) && !matched) {
-      // Fetch the first conversation's messages or find the buyer from any existing conversation/participant
-      if (initialConversations.length > 0) {
-        const sampleMsgRes = await getConversationMessages(initialConversations[0].id, 1);
-        initialCurrentUserId = sampleMsgRes?.currentUserId || null;
-      }
-    }
-
-    if (targetManufacturerId && initialCurrentUserId) {
-      matched = await prisma.conversation.upsert({
-        where: {
-          buyerId_manufacturerId: {
-            buyerId: initialCurrentUserId,
-            manufacturerId: targetManufacturerId,
-          },
-        },
-        update: {},
-        create: {
-          buyerId: initialCurrentUserId,
-          manufacturerId: targetManufacturerId,
-        },
-        include: {
-          manufacturer: { select: { id: true, name: true, logo: true, city: true } },
-          product: { select: { name: true } },
-        },
-      });
-
-      if (matched && !initialConversations.some((c: any) => c.id === matched.id)) {
-        initialConversations = [matched, ...initialConversations];
-      }
-    } else if (targetSlug && initialCurrentUserId) {
-      const product = await prisma.product.findUnique({
-        where: { slug: targetSlug },
-        select: { manufacturerId: true },
-      });
-
-      if (product) {
-        matched = await prisma.conversation.upsert({
+      if (!matched && initialCurrentUserId) {
+        // 2. Check if it exists in the database without creating a new row yet
+        const existingDbConv = await prisma.conversation.findUnique({
           where: {
             buyerId_manufacturerId: {
               buyerId: initialCurrentUserId,
-              manufacturerId: product.manufacturerId,
+              manufacturerId: targetManufacturerId,
             },
-          },
-          update: {},
-          create: {
-            buyerId: initialCurrentUserId,
-            manufacturerId: product.manufacturerId,
           },
           include: {
             manufacturer: { select: { id: true, name: true, logo: true, city: true } },
@@ -97,16 +55,90 @@ export default async function BuyerMessagesPage({
           },
         });
 
-        if (matched && !initialConversations.some((c: any) => c.id === matched.id)) {
-          initialConversations = [matched, ...initialConversations];
+        if (existingDbConv) {
+          matched = existingDbConv;
+        } else {
+          // 3. If no conversation exists in the DB yet, create a temporary UI-only object 
+          const mfr = await prisma.manufacturer.findUnique({
+            where: { id: targetManufacturerId },
+            select: { id: true, name: true, logo: true, city: true },
+          });
+
+          if (mfr) {
+            matched = {
+              id: `temp-${targetManufacturerId}`,
+              manufacturerId: targetManufacturerId,
+              manufacturer: mfr,
+              product: null,
+              isTemporary: true,
+            };
+          }
+        }
+      }
+    } else if (targetSlug) {
+      const product = await prisma.product.findUnique({
+        where: { slug: targetSlug },
+        select: { manufacturerId: true, name: true },
+      });
+
+      if (product) {
+        matched = initialConversations.find((c: any) => c.manufacturerId === product.manufacturerId);
+
+        if (!matched && initialCurrentUserId) {
+          const existingDbConv = await prisma.conversation.findUnique({
+            where: {
+              buyerId_manufacturerId: {
+                buyerId: initialCurrentUserId,
+                manufacturerId: product.manufacturerId,
+              },
+            },
+            include: {
+              manufacturer: { select: { id: true, name: true, logo: true, city: true } },
+              product: { select: { name: true } },
+            },
+          });
+
+          if (existingDbConv) {
+            matched = existingDbConv;
+          } else {
+            const mfr = await prisma.manufacturer.findUnique({
+              where: { id: product.manufacturerId },
+              select: { id: true, name: true, logo: true, city: true },
+            });
+
+            if (mfr) {
+              matched = {
+                id: `temp-${product.manufacturerId}`,
+                manufacturerId: product.manufacturerId,
+                manufacturer: mfr,
+                product: { name: product.name },
+                isTemporary: true,
+              };
+            }
+          }
         }
       }
     }
 
     initialActiveConv = matched;
 
-    // If matched was just set via upsert and messages aren't loaded yet, load them
-    if (matched && initialMessages.length === 0 && !targetConvId) {
+    // Ensure matched is at the top of initialConversations if it's present and not already listed
+    if (matched) {
+      const existsInList = initialConversations.some(
+        (c: any) => c.id === matched.id || c.manufacturerId === matched.manufacturerId
+      );
+      if (!existsInList) {
+        initialConversations = [matched, ...initialConversations];
+      }
+    }
+
+    // Clean de-duplication: Ensure each manufacturer ID appears only ONCE in the inbox sidebar
+    initialConversations = Array.from(
+      new Map(initialConversations.map((c) => [c.manufacturerId, c])).values()
+    );
+
+    // Load messages only if it's a real existing conversation (not temporary)
+    if (matched && !matched.isTemporary) {
       const msgRes = await getConversationMessages(matched.id, 20);
       initialMessages = msgRes?.items || [];
       initialHasMoreMessages = msgRes?.hasMore || false;

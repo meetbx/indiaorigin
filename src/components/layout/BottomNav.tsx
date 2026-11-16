@@ -24,7 +24,7 @@ if (pathname?.startsWith("/products/")) {
   }
 
 // Only hide bottom nav on mobile if an active conversation is open
-  if (pathname?.startsWith("/messages") && searchParams.get("conversationId")) {
+  if (pathname?.startsWith("/messages")) {
     return null;
   }
 

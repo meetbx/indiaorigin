@@ -1,34 +1,53 @@
 "use client";
 
-import React, { useState, useEffect, useRef, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { getBuyerConversations, getConversationMessages, saveServerMessage, sendMediaMessage } from "@/app/actions/chat";
-import { Send, ArrowLeft, Store, MessageSquare , Paperclip, FileText, X, Download } from "lucide-react";
+import {
+  Send,
+  ArrowLeft,
+  Paperclip,
+  Store,
+  MessageSquare,
+  FileText,
+  X,
+  Download,
+  Loader2,
+} from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import * as Ably from "ably";
-
 
 function MessagesContent() {
   const searchParams = useSearchParams();
   const targetConvId = searchParams.get("conversationId");
 
   const [conversations, setConversations] = useState<any[]>([]);
+  const [inboxCursor, setInboxCursor] = useState<string | undefined>(undefined);
+  const [hasMoreInbox, setHasMoreInbox] = useState(false);
+  const [loadingInbox, setLoadingInbox] = useState(false);
+
   const [activeConv, setActiveConv] = useState<any | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
-  const messageCacheRef = useRef<Map<string, any[]>>(new Map());
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [oldestSequence, setOldestSequence] = useState<number | undefined>(undefined);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+
+  const messageCacheRef = useRef(new Map() as Map<string, any[]>);
   const loadRequestRef = useRef(0);
   const [inputText, setInputText] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const isNearBottomRef = useRef(true);
   const ablyRealtimeRef = useRef<Ably.Realtime | null>(null);
   const channelRef = useRef<any>(null);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -42,27 +61,60 @@ function MessagesContent() {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleSelectConversation = useCallback(async (conv: any) => {
+    setActiveConv(conv);
+    const cached = messageCacheRef.current.get(conv.id);
+    if (cached) {
+      setMessages(cached);
+      setHasMoreMessages(true);
+    } else {
+      setMessages([]);
+    }
+
+    const requestId = ++loadRequestRef.current;
+    try {
+      const res = await getConversationMessages(conv.id, 20);
+      if (requestId !== loadRequestRef.current) return;
+
+      messageCacheRef.current.set(conv.id, res.items);
+      setMessages(res.items);
+      setHasMoreMessages(res.hasMore);
+      setOldestSequence(res.nextCursor);
+      setCurrentUserId(res.currentUserId);
+    } catch (e) {
+      console.error("Failed to load conversation messages", e);
+    }
+  }, []);
+
+  // Stage 1: Load lightweight paginated inbox (limit: 20)
   useEffect(() => {
     let cancelled = false;
-    getBuyerConversations()
-      .then((data) => {
+    setLoadingInbox(true);
+    getBuyerConversations(20)
+      .then((res) => {
         if (cancelled) return;
-        setConversations(data);
-        if (data.length > 0) {
+        setConversations(res.items);
+        setInboxCursor(res.nextCursor);
+        setHasMoreInbox(res.hasMore);
+
+        if (res.items.length > 0) {
           const matched = targetConvId
-            ? data.find((c) => c.id === targetConvId) || (window.innerWidth >= 768 ? data[0] : null)
-            : (window.innerWidth >= 768 ? data[0] : null);
+            ? res.items.find((c: any) => c.id === targetConvId) || (window.innerWidth >= 768 ? res.items[0] : null)
+            : (window.innerWidth >= 768 ? res.items[0] : null);
           if (matched) void handleSelectConversation(matched);
         }
       })
-      .catch((error) => console.error("Failed to load conversations", error));
+      .catch((error) => console.error("Failed to load conversations", error))
+      .finally(() => {
+        if (!cancelled) setLoadingInbox(false);
+      });
     return () => { cancelled = true; };
-  }, [targetConvId]);
+  }, [targetConvId, handleSelectConversation]);
 
+  // Stage 2: Ably Realtime Connection & Channel Subscription
   useEffect(() => {
     if (!activeConv?.id || !currentUserId) return;
 
-    // Reuse one Ably connection while switching conversations; only the channel changes.
     let realtime = ablyRealtimeRef.current;
     if (!realtime) {
       realtime = new Ably.Realtime({ authUrl: "/api/ably/auth" });
@@ -74,16 +126,21 @@ function MessagesContent() {
 
     const onNewMessage = (message: any) => {
       const newMsg = message.data;
+      if (!newMsg?.id) return;
+
       setMessages((prev) => {
-        if (prev.some((m) => m.id === newMsg.id)) return prev;
-        const optimisticIndex = prev.findIndex(
-          (m) => m.isOptimistic && m.senderId === newMsg.senderId && m.content === newMsg.content
+        const existingIndex = prev.findIndex(
+          (m) =>
+            m.id === newMsg.id ||
+            (newMsg.clientMessageId && m.clientMessageId === newMsg.clientMessageId)
         );
-        if (optimisticIndex !== -1) {
+
+        if (existingIndex !== -1) {
           const updated = [...prev];
-          updated[optimisticIndex] = newMsg;
+          updated[existingIndex] = newMsg;
           return updated;
         }
+
         return [...prev, newMsg];
       });
     };
@@ -94,7 +151,6 @@ function MessagesContent() {
     return () => {
       channel.unsubscribe("new_message", onNewMessage);
       if (channelRef.current === channel) channelRef.current = null;
-      // Keep the Ably connection alive so opening another chat doesn't reconnect.
     };
   }, [activeConv?.id, currentUserId]);
 
@@ -105,31 +161,52 @@ function MessagesContent() {
     };
   }, []);
 
-  const handleSelectConversation = async (conv: any) => {
-    // Show cached messages immediately while refreshing them in the background.
-    setActiveConv(conv);
-    const cached = messageCacheRef.current.get(conv.id);
-    if (cached) setMessages(cached);
-    else setMessages([]);
+  // Stage 3: Load older messages on scroll-to-top using sequence cursor
+  const handleScroll = async () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
 
-    const requestId = ++loadRequestRef.current;
-    try {
-      const res = await getConversationMessages(conv.id);
-      messageCacheRef.current.set(conv.id, res.messages);
-      if (requestId !== loadRequestRef.current) return;
-      setMessages(res.messages);
-      setCurrentUserId(res.currentUserId);
-    } catch (e) {
-      console.error("Failed to load conversation messages", e);
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    isNearBottomRef.current = distanceFromBottom < 150;
+
+    if (container.scrollTop === 0 && hasMoreMessages && !loadingOlder && oldestSequence !== undefined) {
+      setLoadingOlder(true);
+      const previousHeight = container.scrollHeight;
+
+      try {
+        const res = await getConversationMessages(activeConv.id, 20, oldestSequence);
+        if (res.items.length > 0) {
+          setMessages((prev) => [...res.items, ...prev]);
+          setHasMoreMessages(res.hasMore);
+          setOldestSequence(res.nextCursor);
+
+          requestAnimationFrame(() => {
+            if (messagesContainerRef.current) {
+              messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight - previousHeight;
+            }
+          });
+        } else {
+          setHasMoreMessages(false);
+        }
+      } catch (err) {
+        console.error("Failed to load older messages", err);
+      } finally {
+        setLoadingOlder(false);
+      }
     }
   };
 
   useEffect(() => {
-    if (activeConv?.id) messageCacheRef.current.set(activeConv.id, messages);
-    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    if (activeConv?.id) {
+      messageCacheRef.current.set(activeConv.id, messages);
+    }
+
+    if (isNearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, isTyping, activeConv?.id]);
 
-  
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!inputText.trim() && selectedFiles.length === 0) || !activeConv || !currentUserId || isUploading) return;
@@ -137,7 +214,8 @@ function MessagesContent() {
     const conversationId = activeConv.id as string;
     const contentCopy = inputText.trim();
     const filesCopy = [...selectedFiles];
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const clientMessageId = crypto.randomUUID();
+    const tempId = `temp-${clientMessageId}`;
 
     setInputText("");
     setSelectedFiles([]);
@@ -146,6 +224,7 @@ function MessagesContent() {
     const optimisticMessage = {
       id: tempId,
       conversationId,
+      clientMessageId,
       senderId: currentUserId,
       content: contentCopy || null,
       isRead: false,
@@ -164,10 +243,13 @@ function MessagesContent() {
     setMessages((prev) => [...prev, optimisticMessage]);
 
     try {
-      // Text-only messages avoid FormData/media processing entirely.
       let savedMessage: any;
       if (filesCopy.length === 0) {
-        savedMessage = await saveServerMessage(conversationId, contentCopy);
+        savedMessage = await saveServerMessage(
+          conversationId,
+          contentCopy,
+          clientMessageId
+        );
       } else {
         const formData = new FormData();
         formData.append("content", contentCopy);
@@ -175,18 +257,13 @@ function MessagesContent() {
         savedMessage = await sendMediaMessage(conversationId, formData);
       }
 
-      // Publish only after persistence succeeds. Other participants receive it via Ably.
-      const realtime = ablyRealtimeRef.current;
-      const channel = realtime?.channels.get(`conv_${conversationId}`);
-      if (channel && savedMessage) await channel.publish("new_message", savedMessage);
-
       setMessages((prev) => prev.map((msg) => msg.id === tempId ? savedMessage : msg));
       messageCacheRef.current.set(conversationId, [
-        ...(messageCacheRef.current.get(conversationId) || []).filter((msg) => msg.id !== tempId),
+        ...(messageCacheRef.current.get(conversationId) || []).filter((msg: any) => msg.id !== tempId),
         savedMessage,
       ]);
       setConversations((prev) => prev.map((conv) => conv.id === conversationId
-        ? { ...conv, messages: [savedMessage], lastMessageAt: savedMessage.createdAt }
+        ? { ...conv, lastMessageAt: savedMessage.createdAt }
         : conv));
       optimisticMessage.attachments.forEach((attachment: any) => URL.revokeObjectURL(attachment.fileUrl));
     } catch (err) {
@@ -197,13 +274,9 @@ function MessagesContent() {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputText(e.target.value);
-  };
-
   return (
     <div className="flex h-[100dvh] bg-gray-50 text-gray-900 max-w-6xl mx-auto border-x border-gray-200 overflow-hidden fixed inset-0">
-      {/* Sidebar Inbox - Hidden on mobile if a conversation is active */}
+      {/* Sidebar Inbox */}
       <div 
         className={`w-full md:w-1/3 border-r border-gray-200 bg-white flex flex-col ${
           activeConv ? "hidden md:flex" : "flex"
@@ -234,18 +307,18 @@ function MessagesContent() {
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-bold truncate text-gray-900">{conv.manufacturer?.name}</h3>
                 <p className="text-xs text-gray-500 truncate mt-0.5">
-                  {conv.messages[0]?.content || "No messages yet"}
+                  {conv.product?.name ? `Inquiry regarding ${conv.product.name}` : "Active conversation"}
                 </p>
               </div>
             </div>
           ))}
-          {conversations.length === 0 && (
+          {conversations.length === 0 && !loadingInbox && (
             <div className="text-center p-8 text-gray-400 text-xs">No active conversations yet.</div>
           )}
         </div>
       </div>
 
-      {/* Chat Window - Full width on mobile when active, side-by-side on desktop */}
+      {/* Chat Window */}
       <div 
         className={`flex-1 flex flex-col bg-[#F8FAFC] w-full ${
           !activeConv ? "hidden md:flex" : "flex"
@@ -277,8 +350,17 @@ function MessagesContent() {
               </div>
             </div>
 
-            {/* Messages Scroll Area */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-4">
+            {/* Messages Scroll Area with older message pagination */}
+            <div
+              ref={messagesContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-4"
+            >
+              {loadingOlder && (
+                <div className="text-center py-2">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto text-orange-500" />
+                </div>
+              )}
               {messages.map((msg) => {
                 const isMe = msg.senderId === currentUserId;
                 return (
@@ -297,8 +379,14 @@ function MessagesContent() {
                           {msg.attachments.map((att: any) => (
                             <div key={att.id}>
                               {att.type === "IMAGE" ? (
-                                <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="block relative w-48 h-48 rounded-lg overflow-hidden border border-gray-200">
-                                  <Image src={att.fileUrl} alt={att.fileName || "Attachment"} fill className="object-cover" />
+                                <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="block relative w-48 h-48 sm:w-60 sm:h-60 rounded-lg overflow-hidden border border-gray-200 bg-black/5">
+                                  <Image 
+                                    src={att.fileUrl} 
+                                    alt={att.fileName || "Attachment"} 
+                                    fill 
+                                    sizes="(max-width: 768px) 192px, 240px" 
+                                    className="object-cover" 
+                                  />
                                 </a>
                               ) : (
                                 <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white/10 p-3 rounded-xl border border-gray-200 hover:bg-white/20 transition">
@@ -331,7 +419,6 @@ function MessagesContent() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Message Composer */}
             {/* File Preview Tray */}
             {selectedFiles.length > 0 && (
               <div className="bg-gray-100 px-4 py-2 border-t border-gray-200 flex gap-2 overflow-x-auto">
@@ -340,7 +427,7 @@ function MessagesContent() {
                     {file.type === "application/pdf" ? (
                       <FileText className="w-5 h-5 text-red-500" />
                     ) : (
-                      <img src={URL.createObjectURL(file)} alt="" className="w-8 h-8 object-cover rounded" />
+                      <Paperclip className="w-5 h-5 text-orange-500" />
                     )}
                     <span className="max-w-[100px] truncate">{file.name}</span>
                     <button type="button" onClick={() => removeSelectedFile(idx)} className="text-gray-500 hover:text-red-600">
@@ -375,7 +462,7 @@ function MessagesContent() {
               <input
                 type="text"
                 value={inputText}
-                onChange={handleInputChange}
+                onChange={(e) => setInputText(e.target.value)}
                 placeholder={isUploading ? "Uploading attachment..." : "Type your message..."}
                 disabled={isUploading}
                 className="flex-1 bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5500]/20 focus:border-[#FF5500]"

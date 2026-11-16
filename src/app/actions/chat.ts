@@ -3,138 +3,236 @@
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-// import { getSessionUserId } from "@/lib/auth"; // Adjust to your actual session utility
 import { v2 as cloudinary } from "cloudinary";
+import { inboxService } from "@/lib/messaging/services/inbox.service";
+import { messageService } from "@/lib/messaging/services/message.service";
 
-/**
- * Robust central helper to resolve the logged-in user safely 
- * supporting ID, phone, or email across all auth providers.
- */
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-
-
+/**
+ * Robust central helper to resolve the logged-in user safely 
+ * supporting ID, phone, or email across all auth providers.
+ */
 async function getAuthenticatedUser() {
   const session = await getServerSession(authOptions);
 
-  const userId = (session?.user as any)?.id;
-  const userEmail = session?.user?.email;
-  const userPhone = (session?.user as any)?.phone;
+  const sessionUser = session?.user as {
+    id?: string;
+    email?: string | null;
+    phone?: string | null;
+  } | undefined;
 
-  if (!userId && !userEmail && !userPhone) {
-    return null;
+  if (!sessionUser) return null;
+
+  if (sessionUser.id) {
+    return prisma.user.findUnique({
+      where: { id: sessionUser.id },
+    });
   }
 
-  const user = await prisma.user.findFirst({
+  if (sessionUser.email) {
+    const user = await prisma.user.findUnique({
+      where: { email: sessionUser.email },
+    });
+    if (user) return user;
+  }
+
+  if (sessionUser.phone) {
+    return prisma.user.findUnique({
+      where: { phone: sessionUser.phone },
+    });
+  }
+
+  return null;
+}
+
+async function canAccessConversation(
+  userId: string,
+  buyerId: string,
+  manufacturerId: string
+) {
+  if (buyerId === userId) return true;
+
+  const membership = await prisma.manufacturerMember.findUnique({
     where: {
-      OR: [
-        ...(userId ? [{ id: userId }] : []),
-        ...(userPhone ? [{ phone: userPhone }] : []),
-        ...(userEmail ? [{ email: userEmail }] : []),
-      ],
+      userId_manufacturerId: {
+        userId,
+        manufacturerId,
+      },
     },
-    include: { manufacturerMemberships: true },
+    select: { id: true },
   });
 
-  return user;
+  return Boolean(membership);
 }
 
-export async function getBuyerConversations() {
+/**
+ * Paginated buyer conversations inbox (default limit: 20)
+ */
+export async function getBuyerConversations(limit: number = 20, cursor?: string) {
   const user = await getAuthenticatedUser();
-  if (!user) return [];
+  if (!user) return { items: [], nextCursor: undefined, hasMore: false };
 
-  return await prisma.conversation.findMany({
-    where: { buyerId: user.id },
-    include: {
-      manufacturer: true,
-      messages: { orderBy: { createdAt: "desc" }, take: 1 },
-    },
-    orderBy: { lastMessageAt: "desc" },
+  return await inboxService.getInbox(user.id, "BUYER", limit, cursor);
+}
+
+/**
+ * Paginated manufacturer conversations inbox (default limit: 20)
+ */
+export async function getManufacturerConversations(limit: number = 20, cursor?: string) {
+  const user = await getAuthenticatedUser();
+  if (!user) return { items: [], nextCursor: undefined, hasMore: false };
+
+  // Find the primary manufacturer membership ID for the logged-in user
+  const membership = await prisma.manufacturerMember.findFirst({
+    where: { userId: user.id },
+    select: { manufacturerId: true },
   });
+
+  if (!membership) return { items: [], nextCursor: undefined, hasMore: false };
+
+  return await inboxService.getInbox(membership.manufacturerId, "MANUFACTURER", limit, cursor);
 }
 
-export async function getManufacturerConversations() {
+/**
+ * Paginated conversation message history using sequence cursor
+ */
+export async function getConversationMessages(conversationId: string, limit: number = 20, beforeSequence?: number) {
   const user = await getAuthenticatedUser();
-  if (!user || user.manufacturerMemberships.length === 0) return [];
-
-  const manufacturerIds = user.manufacturerMemberships.map((m) => m.manufacturerId);
-
-  return await prisma.conversation.findMany({
-    where: { manufacturerId: { in: manufacturerIds } },
-    include: {
-      buyer: true,
-      manufacturer: true,
-      messages: { orderBy: { createdAt: "desc" }, take: 1 },
-    },
-    orderBy: { lastMessageAt: "desc" },
-  });
-}
-
-export async function getConversationMessages(conversationId: string) {
-  const user = await getAuthenticatedUser();
-  if (!user) throw new Error("Unauthorized");
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
 
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
+    select: {
+      id: true,
+      buyerId: true,
+      manufacturerId: true,
+    },
   });
-  if (!conversation) throw new Error("Conversation not found");
 
-  const isBuyer = conversation.buyerId === user.id;
-  const isManufacturerMember = user.manufacturerMemberships.some(
-    (m) => m.manufacturerId === conversation.manufacturerId
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
+
+  const authorized = await canAccessConversation(
+    user.id,
+    conversation.buyerId,
+    conversation.manufacturerId
   );
 
-  if (!isBuyer && !isManufacturerMember) {
+  if (!authorized) {
     throw new Error("Forbidden");
   }
 
-  const messages = await prisma.message.findMany({
-    where: { conversationId },
-    include: { attachments: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const result = await messageService.getMessages(conversationId, limit, beforeSequence);
 
   return {
-    messages,
+    ...result,
     currentUserId: user.id,
   };
 }
 
-export async function saveServerMessage(conversationId: string, content: string) {
+/**
+ * Save text message transactionally using outbox pattern & atomic sequence allocation
+ */
+export async function saveServerMessage(
+  conversationId: string,
+  content: string,
+  clientMessageId?: string
+) {
   const user = await getAuthenticatedUser();
   if (!user) throw new Error("Unauthorized");
 
+  const trimmedContent = content?.trim();
+  if (!trimmedContent) {
+    throw new Error("Empty message");
+  }
+
+  if (trimmedContent.length > 10000) {
+    throw new Error("Message is too long");
+  }
+
+  if (
+    clientMessageId !== undefined &&
+    (clientMessageId.length === 0 || clientMessageId.length > 128)
+  ) {
+    throw new Error("Invalid client message ID");
+  }
+
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-  });
-  if (!conversation) throw new Error("Conversation not found");
-
-  const isBuyer = conversation.buyerId === user.id;
-  const isManufacturerMember = user.manufacturerMemberships.some(
-    (m) => m.manufacturerId === conversation.manufacturerId
-  );
-
-  if (!isBuyer && !isManufacturerMember) throw new Error("Forbidden");
-  if (!content || content.trim().length === 0) throw new Error("Empty message");
-
-  const savedMessage = await prisma.message.create({
-    data: {
-      conversationId,
-      content: content.trim(),
-      senderId: user.id,
+    select: {
+      id: true,
+      buyerId: true,
+      manufacturerId: true,
     },
   });
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { lastMessageAt: new Date() },
-  });
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
 
-  return savedMessage;
+  const authorized = await canAccessConversation(
+    user.id,
+    conversation.buyerId,
+    conversation.manufacturerId
+  );
+
+  if (!authorized) {
+    throw new Error("Forbidden");
+  }
+
+  // Idempotency check
+  if (clientMessageId) {
+    const existing = await prisma.message.findUnique({
+      where: {
+        conversationId_senderId_clientMessageId: {
+          conversationId,
+          senderId: user.id,
+          clientMessageId,
+        },
+      },
+      include: {
+        attachments: true,
+      },
+    });
+
+    if (existing) return existing;
+  }
+
+  try {
+    return await messageService.sendMessage({
+      conversationId,
+      senderId: user.id,
+      content: trimmedContent,
+      clientMessageId,
+    });
+  } catch (error) {
+    if (clientMessageId) {
+      const existing = await prisma.message.findUnique({
+        where: {
+          conversationId_senderId_clientMessageId: {
+            conversationId,
+            senderId: user.id,
+            clientMessageId,
+          },
+        },
+        include: {
+          attachments: true,
+        },
+      });
+
+      if (existing) return existing;
+    }
+
+    throw error;
+  }
 }
 
 export async function getProductForChat(productSlug: string) {
@@ -184,22 +282,32 @@ export async function getOrCreateConversation(manufacturerId: string, productId?
   }
 }
 
-
 export async function sendMediaMessage(conversationId: string, formData: FormData) {
   const user = await getAuthenticatedUser();
   if (!user) throw new Error("Unauthorized");
 
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    include: { manufacturer: { include: { members: true } } },
+    select: {
+      id: true,
+      buyerId: true,
+      manufacturerId: true,
+    },
   });
-  if (!conversation) throw new Error("Conversation not found");
 
-  const isBuyer = conversation.buyerId === user.id;
-  const isManufacturerMember = user.manufacturerMemberships.some(
-    (m) => m.manufacturerId === conversation.manufacturerId
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
+
+  const authorized = await canAccessConversation(
+    user.id,
+    conversation.buyerId,
+    conversation.manufacturerId
   );
-  if (!isBuyer && !isManufacturerMember) throw new Error("Forbidden");
+
+  if (!authorized) {
+    throw new Error("Forbidden");
+  }
 
   const content = formData.get("content")?.toString() || "";
   const files = formData.getAll("files") as File[];
@@ -218,7 +326,6 @@ export async function sendMediaMessage(conversationId: string, formData: FormDat
     return { file, isPdf };
   });
 
-  // Independent attachments upload concurrently instead of serially.
   const attachmentData = await Promise.all(validatedFiles.map(async ({ file, isPdf }) => {
     const buffer = Buffer.from(await file.arrayBuffer());
     const uploadResult: any = await new Promise((resolve, reject) => {
@@ -237,28 +344,45 @@ export async function sendMediaMessage(conversationId: string, formData: FormDat
     };
   }));
 
-const savedMessage = await prisma.message.create({
-    data: {
-      conversation: {
-        connect: { id: conversationId },
+  return await prisma.$transaction(async (tx) => {
+    const updatedConversation = await tx.conversation.update({
+      where: { id: conversationId },
+      data: {
+        lastMessageSeq: { increment: 1 },
+        lastMessageAt: new Date(),
       },
-      sender: {
-        connect: { id: user.id },
-      },
-      content: content.trim() || "", // <-- Changed from null to empty string
-      attachments: {
-        create: attachmentData,
-      },
-    },
-    include: {
-      attachments: true,
-    },
-  });
+      select: { lastMessageSeq: true },
+    });
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { lastMessageAt: new Date() },
-  });
+    const savedMessage = await tx.message.create({
+      data: {
+        conversationId,
+        senderId: user.id,
+        content: content.trim(),
+        sequence: updatedConversation.lastMessageSeq,
+        attachments: {
+          create: attachmentData,
+        },
+      },
+      include: {
+        attachments: true,
+      },
+    });
 
-  return savedMessage;
+    await tx.messageOutbox.create({
+      data: {
+        dedupeKey: `message.created:${savedMessage.id}`,
+        eventType: "message.created",
+        aggregateId: conversationId,
+        payload: {
+          messageId: savedMessage.id,
+          conversationId,
+          senderId: user.id,
+          sequence: savedMessage.sequence,
+        },
+      },
+    });
+
+    return savedMessage;
+  });
 }

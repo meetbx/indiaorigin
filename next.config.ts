@@ -64,6 +64,11 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        source: '/products/ss316-hex-bolt-m16-100',
+        destination: '/products/stainless-steel-316-hex-bolt-m16-100', // Change to your active alternative product/category URL
+        permanent: true,
+      },
+      {
         source: "/products/plastic-cricket-bat--ball-1794375610833",
         destination: "/products/plastic-cricket-bat-toy-set-with-ball",
         permanent: true,

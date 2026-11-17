@@ -11,7 +11,7 @@ const BASE_URL = "https://www.theindiaorigin.com";
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
-    default: "The India Origin | Connecting Global Buyers with Verified Indian Manufacturers",
+    default: "The India Origin | B2B Wholesale Marketplace",
     template: "%s | The India Origin",
   },
   description: "Direct-from-source B2B marketplace bridging verified Indian manufacturers with global wholesale buyers.",
@@ -24,9 +24,15 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  icons: {
-    icon: "/favicon/favicon.ico",
-    apple: "/favicon/apple-touch-icon.png",
+icons: {
+    icon: [
+      { url: "/favicon/favicon.ico", sizes: "any" },
+      { url: "/favicon/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon/android-chrome-192x192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: [
+      { url: "/favicon/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
   openGraph: {
     type: "website",

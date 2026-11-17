@@ -270,76 +270,87 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const productBlocks = Array.isArray(data.details) ? data.details : [];
 
   // Construct structured data for AI discovery and Google Rich Results
-const validPrices = [
-  data.pricing.minPrice,
-  data.pricing.maxPrice,
-  data.pricing.samplePrice,
-].filter(
-  (price): price is number =>
-    typeof price === "number" &&
-    Number.isFinite(price) &&
-    price > 0
-);
+// Construct structured data for Google Rich Results & AI Discovery
+  const primaryPrice = data.pricing.minPrice || data.pricing.samplePrice || 0;
 
-const productJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "Product",
-  name: data.name,
-  url: `https://www.theindiaorigin.com/products/${data.slug}`,
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: data.name,
+    url: `https://www.theindiaorigin.com/products/${data.slug}`,
+    ...(Array.isArray(data.images) && data.images.length > 0
+      ? {
+          image: data.images.filter(
+            (image): image is string =>
+              typeof image === "string" && image.startsWith("https://")
+          ),
+        }
+      : {}),
+    ...(rawProduct.description ? { description: cleanSeoText(rawProduct.description) } : {}),
+    ...(rawProduct.id ? { sku: rawProduct.id } : {}),
+    ...(rawProduct.manufacturer?.name
+      ? {
+          brand: {
+            "@type": "Brand",
+            name: rawProduct.manufacturer.name,
+          },
+        }
+      : {}),
+    offers: {
+      "@type": "Offer",
+      url: `https://www.theindiaorigin.com/products/${data.slug}`,
+      priceCurrency: "INR",
+      price: primaryPrice > 0 ? primaryPrice : "0",
+      availability: "https://schema.org/InStock",
+      seller: {
+        "@type": "Organization",
+        name: rawProduct.manufacturer?.name || "The India Origin Verified Manufacturer",
+      },
+    },
+  };
 
-  ...(Array.isArray(data.images) &&
-  data.images.some(
-    (image) => typeof image === "string" && image.startsWith("https://")
-  )
-    ? {
-        image: data.images.filter(
-          (image): image is string =>
-            typeof image === "string" && image.startsWith("https://")
-        ),
-      }
-    : {}),
-
-  ...(rawProduct.description
-    ? { description: rawProduct.description }
-    : {}),
-
-  ...(rawProduct.id ? { sku: rawProduct.id } : {}),
-
-  ...(rawProduct.manufacturer?.name
-    ? {
-        brand: {
-          "@type": "Brand",
-          name: rawProduct.manufacturer.name,
-        },
-      }
-    : {}),
-
-  ...(typeof data.pricing.minPrice === "number" &&
-  data.pricing.minPrice > 0 &&
-  typeof data.pricing.maxPrice === "number" &&
-  data.pricing.maxPrice >= data.pricing.minPrice
-    ? {
-        offers: {
-          "@type": "AggregateOffer",
-          url: `https://www.theindiaorigin.com/products/${data.slug}`,
-          priceCurrency: "INR",
-          lowPrice: data.pricing.minPrice,
-          highPrice: data.pricing.maxPrice,
-        },
-      }
-    : {}),
-};
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: "https://www.theindiaorigin.com",
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Products",
+        item: "https://www.theindiaorigin.com/search",
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: data.name,
+        item: `https://www.theindiaorigin.com/products/${data.slug}`,
+      },
+    ],
+  };
 
   return (
 <div className="relative mx-auto min-h-screen w-full max-w-md overflow-x-clip border-x border-slate-200/60 bg-[#F8FAFC] pb-28 font-sans text-slate-900 shadow-2xl">      
 
       {/* Inject Structured Data for AI & Search Crawlers */}
-<script
-  type="application/ld+json"
-  dangerouslySetInnerHTML={{
-    __html: JSON.stringify(productJsonLd).replace(/</g, "\\u003c"),
-  }}
-/>
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(productJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       {/* HEADER */}
 
       <header className="bg-white/95 backdrop-blur-md px-4 py-3 flex items-center justify-between sticky top-0 z-40 border-b border-slate-100 gap-3 w-full shadow-2xs">

@@ -327,6 +327,9 @@ export default function HomePageClient({
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-20 md:pb-10 font-sans">
+
+      
+
       <Header
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -344,6 +347,9 @@ export default function HomePageClient({
       />
 
       <main>
+        <h1 className="sr-only">
+          The India Origin - Direct B2B Marketplace for Verified Indian Manufacturers
+        </h1>
         <ProductGrid
           products={products}
           isLoading={isLoading}

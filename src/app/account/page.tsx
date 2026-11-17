@@ -1,10 +1,25 @@
+import { Metadata } from "next";
+export const metadata: Metadata = {
+  title: "Account | The India Origin",
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
+};
+
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import LoggedInView from "./LoggedInView";
 import AuthForm from "./AuthForm";
 
+
 export const dynamic = "force-dynamic";
+
 
 export default async function AccountPage() {
   

@@ -1,5 +1,19 @@
 export const dynamic = "force-dynamic";
 
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Liked Products | The India Origin",
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
+};
+
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, Heart, Package } from "lucide-react";

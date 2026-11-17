@@ -1,9 +1,22 @@
 import React, { Suspense } from "react";
+import { Metadata } from "next"; //
 import { getBuyerConversations, getConversationMessages } from "@/app/actions/chat";
 import MessagesClient from "@/components/MessagesClient";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: "Messages | The India Origin",
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
+};
 
 export default async function BuyerMessagesPage({
   searchParams,

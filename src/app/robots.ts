@@ -19,7 +19,13 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: ['GPTBot', 'OAI-SearchBot', 'PerplexityBot', 'Google-Extended', 'ClaudeBot'],
         allow: '/',
-        disallow: ['/account/', '/api/', '/messages/'],
+        disallow: [
+  '/account/',
+  '/api/',
+  '/messages/',
+  '/rfq/',
+  '/*?*', // <-- Heads up on this rule
+]
       },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,

@@ -5,6 +5,49 @@ import HomePageClient from "./HomePageClient";
 
 export const revalidate = 60;
 
+
+
+const structuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": "https://www.theindiaorigin.com/#organization",
+    "name": "The India Origin",
+    "alternateName": [
+      "The India Origin Marketplace",
+      "theindiaorigin.com"
+    ],
+    "url": "https://www.theindiaorigin.com/",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://www.theindiaorigin.com/_next/image?url=%2Fimages%2Findiaorigin-logo.png&w=640&q=75"
+    },
+    "description":
+      "The India Origin is an Indian B2B manufacturing marketplace connecting manufacturers, suppliers and buyers across India and international markets.",
+    "knowsAbout": [
+      "Indian Manufacturing",
+      "B2B Marketplace",
+      "Indian Manufacturers",
+      "Industrial Products",
+      "Product Sourcing",
+      "Manufacturing Suppliers"
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": "https://www.theindiaorigin.com/#website",
+    "name": "The India Origin",
+    "alternateName": "The India Origin Marketplace",
+    "url": "https://www.theindiaorigin.com/",
+    "publisher": {
+      "@id": "https://www.theindiaorigin.com/#organization"
+    }
+  }
+];
+
+
+
 export default async function HomePage() {
   let initialProducts: Product[] = [];
   let initialHasMore = false;
@@ -122,11 +165,24 @@ export default async function HomePage() {
     initialError = "Unable to load products. Please try again.";
   }
 
+
   return (
+  <>
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{
+        __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
+      }}
+    />
+
     <HomePageClient
       initialProducts={initialProducts}
       initialHasMore={initialHasMore}
       initialError={initialError}
     />
-  );
+  </>
+);
+
+  
 }
+

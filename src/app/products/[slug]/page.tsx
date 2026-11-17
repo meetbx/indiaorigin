@@ -35,31 +35,209 @@ interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+const SITE_URL = "https://www.theindiaorigin.com";
+const SITE_NAME = "The India Origin";
+
+function cleanSeoText(value: string | null | undefined): string {
+  if (!value) return "";
+
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function limitSeoText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+
+  const shortened = value.slice(0, maxLength - 1);
+  const lastSpace = shortened.lastIndexOf(" ");
+
+  return `${shortened.slice(0, lastSpace > 0 ? lastSpace : maxLength - 1).trim()}…`;
+}
+
+function getAbsoluteImageUrl(image: string | undefined): string | undefined {
+  if (!image) return undefined;
+
+  if (image.startsWith("https://") || image.startsWith("http://")) {
+    return image;
+  }
+
+  if (image.startsWith("/")) {
+    return `${SITE_URL}${image}`;
+  }
+
+  return undefined;
+}
+
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { slug } = await params;
+
   const product = await prisma.product.findUnique({
     where: { slug },
-    select: { name: true, description: true, images: true },
+    select: {
+      name: true,
+      description: true,
+      images: true,
+      moq: true,
+      unit: true,
+      isPublished: true,
+
+      manufacturer: {
+        select: {
+          name: true,
+          city: true,
+          location: {
+            select: {
+              state: true,
+            },
+          },
+        },
+      },
+
+      category: {
+        select: {
+          name: true,
+          parent: {
+            select: {
+              name: true,
+              parent: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   });
 
-  if (!product) return { title: "Product Not Found | IndiaOrigin" };
+  if (!product || !product.isPublished) {
+    return {
+      title: `Product Not Found | ${SITE_NAME}`,
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
 
-  const title = `${product.name} | IndiaOrigin`;
-  const description = product.description ?? `Source ${product.name} directly from verified Indian manufacturers on IndiaOrigin.`;
-  const imageUrl = Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : '/og-image.jpg';
+  const productName = cleanSeoText(product.name);
+  const manufacturerName = cleanSeoText(product.manufacturer?.name);
+  const city = cleanSeoText(product.manufacturer?.city);
+  const state = cleanSeoText(product.manufacturer?.location?.state);
+
+  const location = [city, state].filter(Boolean).join(", ");
+
+  const categoryNames = [
+    product.category?.parent?.parent?.name,
+    product.category?.parent?.name,
+    product.category?.name,
+  ].filter((name): name is string => Boolean(name));
+
+  const categoryText = [...new Set(categoryNames)].join(" > ");
+
+  // Build a concise title around the product's actual search intent.
+  const titleParts = [productName];
+
+  if (location) {
+    titleParts.push(`Manufacturer in ${location}`);
+  } else if (manufacturerName) {
+    titleParts.push(`by ${manufacturerName}`);
+  } else {
+    titleParts.push("Manufacturer & Supplier");
+  }
+
+  const title = limitSeoText(
+    `${titleParts.join(" | ")} | ${SITE_NAME}`,
+    65
+  );
+
+  // Build the description from real product and supplier information.
+  const actualDescription = cleanSeoText(product.description);
+
+  const contextParts = [
+    categoryText ? `Category: ${categoryText}.` : "",
+    manufacturerName ? `Manufacturer: ${manufacturerName}.` : "",
+    location ? `Location: ${location}.` : "",
+    product.moq
+      ? `Minimum order quantity: ${product.moq}${product.unit ? ` ${product.unit}` : ""}.`
+      : "",
+  ].filter(Boolean);
+
+  let description = actualDescription
+    ? `${actualDescription} ${contextParts.join(" ")}`
+    : [
+        `Explore ${productName}`,
+        categoryText ? `in ${categoryText}` : "",
+        manufacturerName ? `from ${manufacturerName}` : "",
+        location ? `located in ${location}` : "",
+        product.moq
+          ? `with a minimum order quantity of ${product.moq}${product.unit ? ` ${product.unit}` : ""}`
+          : "",
+        "on The India Origin.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+  description = limitSeoText(description, 160);
+
+  const canonicalUrl = `${SITE_URL}/products/${encodeURIComponent(slug)}`;
+
+  const imageUrl = getAbsoluteImageUrl(
+    Array.isArray(product.images) ? product.images[0] : undefined
+  );
 
   return {
     title,
     description,
+
+    alternates: {
+      canonical: canonicalUrl,
+    },
+
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
+    },
+
     openGraph: {
+      type: "website",
+      url: canonicalUrl,
+      siteName: SITE_NAME,
       title,
       description,
-      url: `https://www.theindiaorigin.com/products/${slug}`,
-      images: [{ url: imageUrl }],
-      type: 'website',
+      ...(imageUrl
+        ? {
+            images: [
+              {
+                url: imageUrl,
+                alt: productName,
+              },
+            ],
+          }
+        : {}),
     },
-    alternates: {
-      canonical: `https://www.theindiaorigin.com/products/${slug}`,
+
+    twitter: {
+      card: imageUrl ? "summary_large_image" : "summary",
+      title,
+      description,
+      ...(imageUrl ? { images: [imageUrl] } : {}),
     },
   };
 }
@@ -79,7 +257,9 @@ export default async function ProductDetailPage({ params }: PageProps) {
     Promise.resolve(null), // Placeholder to keep structure clean for concurrent extensions if needed
   ]);
 
-  if (!rawProduct) notFound();
+  if (!rawProduct || !rawProduct.isPublished) {
+  notFound();
+}
 
   // Fetch similar products dynamically with selective fields concurrently
 // 2. Data Normalization

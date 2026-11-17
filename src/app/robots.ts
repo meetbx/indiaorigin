@@ -1,14 +1,20 @@
 import { MetadataRoute } from 'next';
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = 'https://www.theindiaorigin.com';
+  const baseUrl = 'https://www.theindiaorigin.com'; // Adjust to your exact canonical preference (with or without www)
 
   return {
     rules: [
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/account/', '/api/', '/messages/', '/rfq/'],
+        disallow: [
+          '/account/',
+          '/api/',
+          '/messages/',
+          '/rfq/',
+          '/*?*', // Prevents Googlebot from wasting crawl budget on filter/sort permutations
+        ],
       },
       {
         userAgent: ['GPTBot', 'OAI-SearchBot', 'PerplexityBot', 'Google-Extended', 'ClaudeBot'],

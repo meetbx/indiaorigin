@@ -1,193 +1,281 @@
-"use client";
 
-import React, { useState, useEffect, useCallback, use } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Header } from "@/components/layout/Header";
-import { ProductGrid } from "@/components/marketplace/ProductGrid";
-import { FeaturedSection } from "@/components/marketplace/FeaturedSection";
-import { Product } from "@/types/marketplace";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import CategoryClient from "./CategoryClient";
 
-interface CategoryInfo {
+const SITE_URL = "https://www.theindiaorigin.com";
+const PAGE_SIZE = 12;
+
+// Keep category pages eligible for ISR. Newly published products may take
+// up to five minutes to appear in an already generated category page.
+export const revalidate = 300;
+
+type RouteParams = {
+  slug: string[];
+};
+
+type CategoryNode = {
   id: string;
   name: string;
   slug: string;
-  description?: string;
-  parentId?: string | null;
-  children?: { id: string; name: string; slug: string }[];
+  parentId: string | null;
+};
+
+async function getCategoryHierarchy(slugSegments: string[]) {
+  if (!slugSegments.length || slugSegments.some((slug) => !slug.trim())) {
+    return null;
+  }
+
+  const finalSlug = slugSegments[slugSegments.length - 1];
+
+  const finalCategory = await prisma.category.findUnique({
+    where: { slug: finalSlug },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      parentId: true,
+      children: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+        orderBy: { name: "asc" },
+      },
+    },
+  });
+
+  if (!finalCategory) return null;
+
+  const ancestors: CategoryNode[] = [
+    {
+      id: finalCategory.id,
+      name: finalCategory.name,
+      slug: finalCategory.slug,
+      parentId: finalCategory.parentId,
+    },
+  ];
+
+  let parentId = finalCategory.parentId;
+  let depth = 0;
+
+  // Walk upward through the actual parent relations.
+  // The depth guard protects against malformed cyclic category data.
+  while (parentId && depth < 20) {
+    const parent = await prisma.category.findUnique({
+      where: { id: parentId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        parentId: true,
+      },
+    });
+
+    if (!parent) return null;
+
+    ancestors.push(parent);
+    parentId = parent.parentId;
+    depth += 1;
+  }
+
+  if (parentId) return null;
+
+  ancestors.reverse();
+
+  // A URL must match the real hierarchy, not merely the final category slug.
+  const actualPath = ancestors.map((item) => item.slug);
+
+  if (
+    actualPath.length !== slugSegments.length ||
+    actualPath.some((slug, index) => slug !== slugSegments[index])
+  ) {
+    return null;
+  }
+
+  return {
+    category: finalCategory,
+    breadcrumbs: ancestors.map(({ id, name, slug }) => ({
+      id,
+      name,
+      slug,
+    })),
+  };
 }
 
-export default function CategoryBrowsingPage({
+function getCategoryDescription(categoryName: string) {
+  return `Explore ${categoryName} from verified manufacturers and suppliers in India. Compare products, minimum order quantities and pricing, and connect directly with manufacturers.`;
+}
+
+async function getCategoryPageData(slugSegments: string[]) {
+  const hierarchy = await getCategoryHierarchy(slugSegments);
+
+  if (!hierarchy) return null;
+
+  const { category, breadcrumbs } = hierarchy;
+
+  const [products, totalProducts] = await Promise.all([
+    prisma.product.findMany({
+      where: {
+        categoryId: category.id,
+        isPublished: true,
+      },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        manufacturer: {
+  select: {
+    id: true,
+    name: true,
+    slug: true,
+    isVerified: true,
+    city: true,
+    badge: true,
+    location: {
+      select: {
+        state: true,
+      },
+    },
+  },
+},
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      skip: 0,
+      take: PAGE_SIZE,
+    }),
+
+    prisma.product.count({
+      where: {
+        categoryId: category.id,
+        isPublished: true,
+      },
+    }),
+  ]);
+
+  // Convert Prisma Date objects and JSON fields into serializable client props.
+  const serializedProducts = products.map((product) => ({
+  ...product,
+
+  createdAt: product.createdAt.toISOString(),
+  updatedAt: product.updatedAt.toISOString(),
+
+  description: product.description ?? undefined,
+
+  specifications:
+    (product.specifications as Record<string, string> | null) ?? undefined,
+
+  category: {
+    id: product.category.id,
+    name: product.category.name,
+    slug: product.category.slug,
+  },
+
+  manufacturer: {
+    ...product.manufacturer,
+    city: product.manufacturer.city ?? "",
+    location: product.manufacturer.location
+      ? {
+          state: product.manufacturer.location.state ?? undefined,
+        }
+      : null,
+  },
+}));
+
+  return {
+    category: {
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      description: getCategoryDescription(category.name),
+    },
+    breadcrumbs,
+    subcategories: category.children,
+    products: serializedProducts,
+    pagination: {
+      page: 1,
+      limit: PAGE_SIZE,
+      total: totalProducts,
+      totalPages: Math.ceil(totalProducts / PAGE_SIZE),
+      hasMore: totalProducts > PAGE_SIZE,
+    },
+  };
+}
+
+export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug?: string[] }> | { slug?: string[] };
+  params: Promise<RouteParams>;
+}): Promise<Metadata> {
+  const { slug = [] } = await params;
+  const data = await getCategoryPageData(slug);
+
+  if (!data) {
+    return {
+      title: "Category Not Found | The India Origin",
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
+
+  const categoryName = data.category.name;
+  const title = `${categoryName} Manufacturers, Suppliers & Products in India`;
+  const description = data.category.description;
+  const canonicalPath = `/category/${slug.map(encodeURIComponent).join("/")}`;
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: canonicalPath,
+    },
+    openGraph: {
+      title,
+      description,
+      url: `${SITE_URL}${canonicalPath}`,
+      siteName: "The India Origin",
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+    },
+  };
+}
+
+export default async function CategoryBrowsingPage({
+  params,
+}: {
+  params: Promise<RouteParams>;
 }) {
-  const router = useRouter();
-  const resolvedParams = use(params as Promise<{ slug?: string[] }>);
-  
-  const slugSegments = Array.isArray(resolvedParams?.slug)
-    ? resolvedParams.slug
-    : resolvedParams?.slug
-    ? [resolvedParams.slug]
-    : [];
+  const { slug = [] } = await params;
+  const data = await getCategoryPageData(slug);
 
-  const currentSlug = slugSegments[slugSegments.length - 1] || "";
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeTopTab, setActiveTopTab] = useState("products");
-
-  const [category, setCategory] = useState<CategoryInfo | null>(null);
-  const [subcategories, setSubcategories] = useState<{ id: string; name: string; slug: string }[]>([]);
-  const [breadcrumbs, setBreadcrumbs] = useState<{ name: string; slug: string }[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-
-  const fetchCategoryData = useCallback(async (pageNum = 1, isInitial = true) => {
-    if (!currentSlug || slugSegments.length === 0) return;
-    setIsLoading(isInitial);
-    setError(null);
-
-    try {
-      const endpoint = `/api/category/${slugSegments.join("/")}?page=${pageNum}&limit=12`;
-      const res = await fetch(endpoint);
-      const result = await res.json();
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to load category data.");
-      }
-
-      setCategory(result.category);
-      setSubcategories(result.category?.children || []);
-      setBreadcrumbs(result.breadcrumbs || []);
-
-      if (isInitial) {
-        setProducts(result.products || []);
-      } else {
-        setProducts((prev) => [...prev, ...(result.products || [])]);
-      }
-
-      setHasMore(result.pagination?.hasMore || false);
-      setPage(result.pagination?.page || pageNum);
-    } catch (err: any) {
-      setError(err.message || "An unexpected error occurred.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentSlug, slugSegments]);
-
-  useEffect(() => {
-    if (currentSlug) {
-      fetchCategoryData(1, true);
-    }
-  }, [currentSlug, fetchCategoryData]);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-    } else {
-      router.push("/search");
-    }
-  };
-
-  const handleSearchClick = () => {
-    router.push(searchQuery ? `/search?q=${encodeURIComponent(searchQuery)}` : "/search");
-  };
-
-  const handleLoadMore = () => {
-    if (!isLoading && hasMore) {
-      fetchCategoryData(page + 1, false);
-    }
-  };
-
-  const categoryTitle = category?.name || currentSlug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  if (!data) {
+    notFound();
+  }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-20 md:pb-10 font-sans">
-      <Header
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        onSearchSubmit={handleSearchSubmit}
-        onSearchClick={handleSearchClick}
-        activeTopTab={activeTopTab}
-        setActiveTopTab={setActiveTopTab}
-      />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Breadcrumbs */}
-        <nav className="flex items-center space-x-2 text-sm text-slate-500 mb-6 overflow-x-auto whitespace-nowrap pb-2">
-          <Link href="/" className="hover:text-orange-600 transition-colors">Home</Link>
-          {breadcrumbs.map((crumb, idx) => (
-            <React.Fragment key={crumb.slug}>
-              <span>→</span>
-              {idx === breadcrumbs.length - 1 ? (
-                <span className="text-slate-800 font-medium">{crumb.name}</span>
-              ) : (
-                <Link href={`/category/${crumb.slug}`} className="hover:text-orange-600 transition-colors">
-                  {crumb.name}
-                </Link>
-              )}
-            </React.Fragment>
-          ))}
-        </nav>
-
-        {/* Category Header */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">
-            {categoryTitle}
-          </h1>
-          <p className="text-slate-600 text-sm sm:text-base max-w-3xl">
-            {category?.description || `Explore verified manufacturers, suppliers, and industrial products under ${categoryTitle}.`}
-          </p>
-        </div>
-
-        {/* Subcategories Section */}
-        {subcategories.length > 0 && (
-          <div className="mb-8 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4">Subcategories</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {subcategories.map((sub) => {
-                const subPath = [...slugSegments, sub.slug].join("/");
-                return (
-                  <Link
-                    key={sub.id}
-                    href={`/category/${subPath}`}
-                    className="bg-slate-50 border border-slate-200 hover:border-orange-500 rounded-xl p-3 text-center transition-all shadow-sm hover:shadow group"
-                  >
-                    <span className="text-xs sm:text-sm font-semibold text-slate-700 group-hover:text-orange-600 line-clamp-2">
-                      {sub.name}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Reused Marketplace ProductGrid Component */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="text-lg font-bold text-slate-900">Products in {categoryTitle}</h2>
-            <span className="text-xs text-slate-500 font-medium">{products.length} items loaded</span>
-          </div>
-
-          <ProductGrid
-            products={products}
-            isLoading={isLoading}
-            error={error}
-            hasMore={hasMore}
-            onLoadMore={handleLoadMore}
-            onRetry={() => fetchCategoryData(1, true)}
-            onClearFilters={() => fetchCategoryData(1, true)}
-          />
-        </div>
-
-        <FeaturedSection />
-      </main>
-    </div>
+    <CategoryClient
+      slugSegments={slug}
+      category={data.category}
+      breadcrumbs={data.breadcrumbs}
+      subcategories={data.subcategories}
+      initialProducts={data.products}
+      initialPage={data.pagination.page}
+      hasMoreInitially={data.pagination.hasMore}
+      totalProducts={data.pagination.total}
+    />
   );
 }

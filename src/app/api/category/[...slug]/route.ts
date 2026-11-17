@@ -1,138 +1,244 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
-export async function GET(
-  request: Request,
-  context: { params: Promise<{ slug?: string[] }> | { slug?: string[] } }
-) {
-  try {
-    const resolvedParams = await Promise.resolve(context.params);
-    const slugSegments = resolvedParams?.slug || [];
-    
-    if (slugSegments.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "Category slug is required" },
-        { status: 400 }
-      );
-    }
+const DEFAULT_LIMIT = 12;
+const MAX_LIMIT = 24;
 
-    const currentSlug = slugSegments[slugSegments.length - 1];
+type RouteParams = {
+  slug: string[];
+};
 
-    // Find the category by slug using the Prisma Category model
-    const category = await prisma.category.findUnique({
-      where: { slug: currentSlug },
-      include: {
-        parent: true,
-        children: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
+async function validateCategoryPath(slugSegments: string[]) {
+  if (!slugSegments.length || slugSegments.some((slug) => !slug.trim())) {
+    return null;
+  }
+
+  const finalSlug = slugSegments[slugSegments.length - 1];
+
+  const category = await prisma.category.findUnique({
+    where: { slug: finalSlug },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      parentId: true,
+      children: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
         },
+        orderBy: { name: "asc" },
+      },
+    },
+  });
+
+  if (!category) return null;
+
+  const ancestors = [
+    {
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      parentId: category.parentId,
+    },
+  ];
+
+  let parentId = category.parentId;
+  let depth = 0;
+
+  while (parentId && depth < 20) {
+    const parent = await prisma.category.findUnique({
+      where: { id: parentId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        parentId: true,
       },
     });
 
-    if (!category) {
+    if (!parent) return null;
+
+    ancestors.push(parent);
+    parentId = parent.parentId;
+    depth += 1;
+  }
+
+  if (parentId) return null;
+
+  ancestors.reverse();
+
+  const actualPath = ancestors.map((item) => item.slug);
+
+  if (
+    actualPath.length !== slugSegments.length ||
+    actualPath.some((slug, index) => slug !== slugSegments[index])
+  ) {
+    return null;
+  }
+
+  return {
+    category,
+    breadcrumbs: ancestors.map(({ id, name, slug }) => ({
+      id,
+      name,
+      slug,
+    })),
+  };
+}
+
+function getCategoryDescription(categoryName: string) {
+  return `Explore ${categoryName} from verified manufacturers and suppliers in India. Compare products, minimum order quantities and pricing, and connect directly with manufacturers.`;
+}
+
+function serializeProduct(product: any) {
+  return {
+    ...product,
+    createdAt: product.createdAt.toISOString(),
+    updatedAt: product.updatedAt.toISOString(),
+    specifications: product.specifications ?? undefined,
+    manufacturer: {
+      ...product.manufacturer,
+      city: product.manufacturer.city ?? "",
+      location: product.manufacturer.location
+        ? {
+            state: product.manufacturer.location.state ?? undefined,
+            country: product.manufacturer.location.country ?? undefined,
+          }
+        : null,
+    },
+  };
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<RouteParams> }
+) {
+  try {
+    const { slug = [] } = await params;
+
+    const hierarchy = await validateCategoryPath(slug);
+
+    if (!hierarchy) {
       return NextResponse.json(
-        { success: false, error: "Category not found" },
+        {
+          success: false,
+          error: "Category not found.",
+        },
         { status: 404 }
       );
     }
 
-    // Build hierarchical breadcrumbs
-    const breadcrumbs = [];
-    for (let i = 0; i < slugSegments.length; i++) {
-      const seg = slugSegments[i];
-      const matchedCat = await prisma.category.findUnique({
-        where: { slug: seg },
-        select: { name: true, slug: true },
-      });
-      breadcrumbs.push({
-        name: matchedCat ? matchedCat.name : seg.replace(/-/g, " "),
-        slug: slugSegments.slice(0, i + 1).join("/"),
-      });
+    const { category, breadcrumbs } = hierarchy;
+
+    const searchParams = request.nextUrl.searchParams;
+
+    const requestedPage = Number(searchParams.get("page") ?? 1);
+    const requestedLimit = Number(
+      searchParams.get("limit") ?? DEFAULT_LIMIT
+    );
+
+    if (
+      !Number.isInteger(requestedPage) ||
+      requestedPage < 1 ||
+      !Number.isInteger(requestedLimit) ||
+      requestedLimit < 1
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid pagination parameters.",
+        },
+        { status: 400 }
+      );
     }
 
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get("page") || "1", 10);
-    const limit = parseInt(url.searchParams.get("limit") || "12", 10);
+    const page = requestedPage;
+    const limit = Math.min(requestedLimit, MAX_LIMIT);
     const skip = (page - 1) * limit;
 
-    // Fetch published products belonging to this category ID
-    const [products, totalCount] = await Promise.all([
+    const productWhere = {
+      categoryId: category.id,
+      isPublished: true,
+    };
+
+    const [products, total] = await Promise.all([
       prisma.product.findMany({
-        where: {
-          categoryId: category.id,
-          isPublished: true,
-        },
+        where: productWhere,
         include: {
-          manufacturer: {
+          category: {
             select: {
+              id: true,
               name: true,
-              city: true,
-              badge: true,
-              isVerified: true,
-              location: { select: { state: true } },
+              slug: true,
             },
           },
+          manufacturer: {
+  select: {
+    id: true,
+    name: true,
+    slug: true,
+    isVerified: true,
+    city: true,
+    badge: true,
+    location: {
+      select: {
+        state: true,
+      },
+    },
+  },
+},
+        },
+        orderBy: {
+          createdAt: "desc",
         },
         skip,
         take: limit,
-        orderBy: { createdAt: "desc" },
       }),
+
       prisma.product.count({
-        where: {
-          categoryId: category.id,
-          isPublished: true,
-        },
+        where: productWhere,
       }),
     ]);
 
-    // Format products to match the exact Marketplace Product type expected by ProductGrid
-    const formattedProducts = products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      images: p.images || [],
-      minPrice: p.minPrice,
-      maxPrice: p.maxPrice,
-      moq: p.moq,
-      unit: p.unit,
-      manufacturer: p.manufacturer ? {
-        name: p.manufacturer.name,
-        city: p.manufacturer.city,
-        badge: p.manufacturer.badge,
-        isVerified: p.manufacturer.isVerified,
-        location: p.manufacturer.location,
-      } : undefined,
-    }));
+    const serializedProducts = products.map(serializeProduct);
 
-    return NextResponse.json({
-      success: true,
-      category: {
-        id: category.id,
-        name: category.name,
-        slug: category.slug,
-        description: `Explore verified manufacturers, suppliers, and industrial products under ${category.name}.`,
-        parentId: category.parentId,
-        children: category.children,
-      },
-      breadcrumbs,
-      products: formattedProducts,
-      pagination: {
-        page,
-        limit,
-        total: totalCount,
-        hasMore: skip + products.length < totalCount,
-      },
-    });
-  } catch (error: any) {
-    console.error("Category API Error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      {
+        success: true,
+        category: {
+          id: category.id,
+          name: category.name,
+          slug: category.slug,
+          description: getCategoryDescription(category.name),
+          children: category.children,
+        },
+        breadcrumbs,
+        products: serializedProducts,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+          hasMore: skip + products.length < total,
+        },
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("Category API error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Unable to load category products.",
+      },
       { status: 500 }
     );
   }

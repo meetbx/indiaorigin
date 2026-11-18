@@ -244,6 +244,30 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
     </div>
   </div>
 </section>
+
+
+
+{/* Manufacturer Description - SEO Content */}
+
+{manufacturer.description && (
+  <section className="bg-white p-4 sm:p-6 sm:rounded-2xl border border-gray-200 shadow-sm mt-3">
+
+    <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3">
+      About {manufacturer.name}
+    </h2>
+
+    <div className="text-sm text-gray-700 leading-7 whitespace-pre-line">
+      {manufacturer.description}
+    </div>
+
+    <p className="mt-3 text-xs text-gray-500">
+      Manufacturer location: {manufacturer.city},{" "}
+      {manufacturer.location?.state || "India"}
+    </p>
+
+  </section>
+)}
+
         {/* ========================================================= */}
         {/* 3. MAIN TABS NAVIGATION                                    */}
         {/* ========================================================= */}
@@ -558,9 +582,9 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
                 )}
 
                 {/* Issuing Body Badge */}
-                {cert.issuingBody && (
+                {cert.issuedBy && (
                   <span className="inline-block mt-2 text-[10px] bg-slate-200/60 text-slate-700 px-2 py-0.5 rounded font-medium">
-                    Issued by {cert.issuingBody}
+                    Issued by {cert.issuedBy}
                   </span>
                 )}
               </div>
@@ -668,7 +692,7 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
         {/* ========================================================= */}
         {/* 12. PRODUCTS TAB                                           */}
         {/* ========================================================= */}
-        {(activeTab === "products" || activeTab === "home") && (
+        {manufacturer.products?.length > 0 && (
           <section className="bg-white p-4 sm:rounded-2xl border border-gray-200 shadow-sm mt-2 sm:mt-4 space-y-4">
             <h2 className="text-sm sm:text-base font-extrabold text-gray-900 uppercase tracking-wider">
               Product Catalog ({manufacturer.products.length})

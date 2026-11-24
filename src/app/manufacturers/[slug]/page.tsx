@@ -237,7 +237,7 @@ export default async function ManufacturerPage({
     }
   }
 
-  // ======================================================
+// ======================================================
   // 3. ORGANIZATION STRUCTURED DATA
   // ======================================================
 
@@ -281,6 +281,35 @@ export default async function ManufacturerPage({
       addressCountry: "IN",
     },
 
+    ...(reviewCount > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: Number(avgRating.toFixed(1)),
+            reviewCount: reviewCount,
+            bestRating: 5,
+            worstRating: 1,
+          },
+          review: reviews.slice(0, 5).map((rev) => ({
+            "@type": "Review",
+            author: {
+              "@type": "Person",
+              name: rev.buyer?.name || "Verified Buyer",
+            },
+            datePublished: new Date(rev.createdAt).toISOString().split("T")[0],
+            reviewRating: {
+              "@type": "Rating",
+              ratingValue: rev.rating,
+              bestRating: 5,
+              worstRating: 1,
+            },
+            ...(rev.comment
+              ? { reviewBody: cleanText(rev.comment, 300) }
+              : {}),
+          })),
+        }
+      : {}),
+
     ...(manufacturer.certificationsList.length > 0
       ? {
           hasCredential: manufacturer.certificationsList.map(
@@ -289,10 +318,12 @@ export default async function ManufacturerPage({
               name: cert.name,
               credentialCategory: "Certification",
               ...(cert.issuedBy
-                ? { recognizedBy: {
-                    "@type": "Organization",
-                    name: cert.issuedBy,
-                  }}
+                ? {
+                    recognizedBy: {
+                      "@type": "Organization",
+                      name: cert.issuedBy,
+                    },
+                  }
                 : {}),
             })
           ),

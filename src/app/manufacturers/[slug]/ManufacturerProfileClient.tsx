@@ -13,7 +13,6 @@ import {
   BadgeCheck,
   MapPin,
   Star,
-  ChevronRight,
   ShieldCheck,
   Check,
   Building2,
@@ -24,12 +23,9 @@ import {
   Layers,
   Send,
   Image as ImageIcon,
-  ChevronDown,
-  X,
 } from "lucide-react";
 import InquiryModal from "./InquiryModal";
 import BadgeDisplay from "@/components/marketplace/BadgeDisplay";
-
 
 interface Props {
   manufacturer: any;
@@ -49,7 +45,18 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
   const [activeMediaTab, setActiveMediaTab] = useState<"photos" | "videos">("photos");
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const [copiedCertId, setCopiedCertId] = useState<string | null>(null);
-  
+
+// Reviews State
+const [reviewsList, setReviewsList] = useState<any[]>(manufacturer.reviews || []);
+const [showAllReviews, setShowAllReviews] = useState<boolean>(false);
+const [isReviewFormOpen, setIsReviewFormOpen] = useState<boolean>(false);
+const [userRating, setUserRating] = useState<number>(5);
+const [hoverRating, setHoverRating] = useState<number>(0);
+const [userComment, setUserComment] = useState<string>("");
+const [isSubmittingReview, setIsSubmittingReview] = useState<boolean>(false);
+const [reviewError, setReviewError] = useState<string | null>(null);
+const [reviewSuccess, setReviewSuccess] = useState<boolean>(false);
+
   // Modals
   const [isInquiryOpen, setIsInquiryOpen] = useState(false);
   const [selectedProductForInquiry, setSelectedProductForInquiry] = useState<any>(null);
@@ -63,11 +70,22 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
   const photos: string[] = manufacturer.mediaPhotos || [];
   const certsList = manufacturer.certificationsList || [];
   const stringCerts = manufacturer.certifications || [];
-  const reviews = manufacturer.reviews || [];
-  const reviewStats = manufacturer.reviewStats;
+
+  // Dynamically calculate stats from reviewsList
+  const reviewCount = reviewsList.length;
+  const avgRating =
+    reviewCount > 0
+      ? reviewsList.reduce((acc: number, r: any) => acc + r.rating, 0) / reviewCount
+      : 0;
+  const reviewStats = {
+    reviewCount,
+    avgRating,
+    avgService: manufacturer.reviewStats?.avgService || 0,
+    avgShipping: manufacturer.reviewStats?.avgShipping || 0,
+    avgQuality: manufacturer.reviewStats?.avgQuality || 0,
+  };
 
   // Filter certifications by category
-  const certCategories = ["All", ...Array.from(new Set(certsList.map((c: any) => c.category).filter(Boolean)))];
   const filteredCerts = certsList.filter((c: any) => {
     if (certFilter === "All") return true;
     return c.category === certFilter;
@@ -75,7 +93,6 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
 
   // Action Handlers
   const handleChatNow = () => {
-    // Standardized Progressive Auth Hook Trigger
     if (typeof window !== "undefined" && (window as any).triggerAuthAction) {
       (window as any).triggerAuthAction(() => {
         router.push(`/chat?manufacturerId=${manufacturer.id}`);
@@ -115,6 +132,45 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
     } else {
       navigator.clipboard.writeText(window.location.href);
       alert("Store link copied to clipboard!");
+    }
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setReviewError(null);
+    setReviewSuccess(false);
+
+    if (userRating < 1 || userRating > 5) {
+      setReviewError("Please select a star rating.");
+      return;
+    }
+
+    setIsSubmittingReview(true);
+    try {
+      const res = await fetch(`/api/manufacturers/${manufacturer.slug}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rating: userRating,
+          comment: userComment,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to submit review");
+      }
+
+      setReviewsList((prev) => [data.review, ...prev]);
+      setUserComment("");
+      setUserRating(5);
+      setReviewSuccess(true);
+      setIsReviewFormOpen(false);
+      router.refresh();
+    } catch (err: any) {
+      setReviewError(err.message || "Something went wrong.");
+    } finally {
+      setIsSubmittingReview(false);
     }
   };
 
@@ -161,112 +217,106 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
       </header>
 
       <div className="max-w-6xl mx-auto px-0 sm:px-4 pt-0 sm:pt-4">
-{/* ========================================================= */}
-{/* 2. MANUFACTURER IDENTITY CARD                              */}
-{/* ========================================================= */}
-<section className="bg-white p-4 sm:p-6 sm:rounded-2xl border-b sm:border border-gray-200 shadow-sm">
-  {/* Render Manufacturer Badge (Diamond, Gold, Silver) or fallback Verified Badge */}
-  {manufacturer.badge && manufacturer.badge !== "NONE" ? (
-    <div className="mb-2">
-      <BadgeDisplay badge={manufacturer.badge} />
-    </div>
-  ) : manufacturer.isVerified ? (
-    <div className="inline-flex items-center gap-1.5 text-blue-700 bg-blue-50 text-[11px] font-semibold px-2.5 py-1 rounded-md mb-2 border border-blue-100">
-      <BadgeCheck className="w-4 h-4 text-blue-600 fill-blue-100" />
-      <span>Verified Direct Manufacturer</span>
-    </div>
-  ) : null}
+        {/* ========================================================= */}
+        {/* 2. MANUFACTURER IDENTITY CARD                              */}
+        {/* ========================================================= */}
+        <section className="bg-white p-4 sm:p-6 sm:rounded-2xl border-b sm:border border-gray-200 shadow-sm">
+          {manufacturer.badge && manufacturer.badge !== "NONE" ? (
+            <div className="mb-2">
+              <BadgeDisplay badge={manufacturer.badge} />
+            </div>
+          ) : manufacturer.isVerified ? (
+            <div className="inline-flex items-center gap-1.5 text-blue-700 bg-blue-50 text-[11px] font-semibold px-2.5 py-1 rounded-md mb-2 border border-blue-100">
+              <BadgeCheck className="w-4 h-4 text-blue-600 fill-blue-100" />
+              <span>Verified Direct Manufacturer</span>
+            </div>
+          ) : null}
 
-  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-    <div className="flex items-start gap-3">
-      {manufacturer.logo ? (
-        <img
-          src={manufacturer.logo}
-          alt={manufacturer.name}
-          className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-gray-200 bg-white shrink-0"
-        />
-      ) : (
-        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl border border-gray-200 flex items-center justify-center shrink-0 text-slate-400 font-bold text-xl">
-          {manufacturer.name.charAt(0)}
-        </div>
-      )}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              {manufacturer.logo ? (
+                <img
+                  src={manufacturer.logo}
+                  alt={manufacturer.name}
+                  className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-gray-200 bg-white shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl border border-gray-200 flex items-center justify-center shrink-0 text-slate-400 font-bold text-xl">
+                  {manufacturer.name.charAt(0)}
+                </div>
+              )}
 
-      <div>
-        <h1 className="text-lg sm:text-2xl font-extrabold text-gray-900 leading-tight">
-          {manufacturer.name}
-        </h1>
+              <div>
+                <h1 className="text-lg sm:text-2xl font-extrabold text-gray-900 leading-tight">
+                  {manufacturer.name}
+                </h1>
 
-        <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-600">
-          {reviewStats.avgRating > 0 && (
-            <span className="font-bold text-gray-900 flex items-center gap-1">
-              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-              {reviewStats.avgRating.toFixed(1)}/5
-            </span>
-          )}
+                <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-600">
+                  {reviewStats.avgRating > 0 && (
+                    <span className="font-bold text-gray-900 flex items-center gap-1">
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      {reviewStats.avgRating.toFixed(1)}/5
+                    </span>
+                  )}
 
-          {yearsInBusiness !== null && (
-            <>
-              <span>•</span>
-              <span className="font-medium">{yearsInBusiness} yrs exp</span>
-            </>
-          )}
+                  {yearsInBusiness !== null && (
+                    <>
+                      <span>•</span>
+                      <span className="font-medium">{yearsInBusiness} yrs exp</span>
+                    </>
+                  )}
 
-          <span>•</span>
-          <span className="flex items-center gap-1 font-medium">
-            <MapPin className="w-3.5 h-3.5 text-gray-400" />
-            {manufacturer.city}, {manufacturer.location?.state || "India"}
-          </span>
-        </div>
-      </div>
-    </div>
+                  <span>•</span>
+                  <span className="flex items-center gap-1 font-medium">
+                    <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                    {manufacturer.city}, {manufacturer.location?.state || "India"}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-    {/* Favorite & Chat Buttons */}
-    <div className="flex items-center gap-2 mt-2 sm:mt-0">
-      <button
-        onClick={() => setIsFavorited(!isFavorited)}
-        className={`p-2.5 rounded-xl border transition flex items-center justify-center ${
-          isFavorited
-            ? "bg-rose-50 border-rose-200 text-rose-600"
-            : "border-gray-300 hover:bg-gray-50 text-gray-700"
-        }`}
-        aria-label="Save Manufacturer"
-      >
-        <Heart className={`w-5 h-5 ${isFavorited ? "fill-rose-600" : ""}`} />
-      </button>
+            {/* Favorite & Chat Buttons */}
+            <div className="flex items-center gap-2 mt-2 sm:mt-0">
+              <button
+                onClick={() => setIsFavorited(!isFavorited)}
+                className={`p-2.5 rounded-xl border transition flex items-center justify-center ${
+                  isFavorited
+                    ? "bg-rose-50 border-rose-200 text-rose-600"
+                    : "border-gray-300 hover:bg-gray-50 text-gray-700"
+                }`}
+                aria-label="Save Manufacturer"
+              >
+                <Heart className={`w-5 h-5 ${isFavorited ? "fill-rose-600" : ""}`} />
+              </button>
 
-      <button
-        onClick={handleChatNow}
-        className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl border border-gray-300 font-bold text-xs sm:text-sm text-gray-800 hover:bg-gray-50 transition flex items-center justify-center gap-2 shadow-sm"
-      >
-        <MessageSquare className="w-4 h-4 text-blue-600" />
-        Chat Now
-      </button>
-    </div>
-  </div>
-</section>
+              <button
+                onClick={handleChatNow}
+                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl border border-gray-300 font-bold text-xs sm:text-sm text-gray-800 hover:bg-gray-50 transition flex items-center justify-center gap-2 shadow-sm"
+              >
+                <MessageSquare className="w-4 h-4 text-blue-600" />
+                Chat Now
+              </button>
+            </div>
+          </div>
+        </section>
 
+        {/* Manufacturer Description - SEO Content */}
+        {manufacturer.description && (
+          <section className="bg-white p-4 sm:p-6 sm:rounded-2xl border border-gray-200 shadow-sm mt-3">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3">
+              About {manufacturer.name}
+            </h2>
 
+            <div className="text-sm text-gray-700 leading-7 whitespace-pre-line">
+              {manufacturer.description}
+            </div>
 
-{/* Manufacturer Description - SEO Content */}
-
-{manufacturer.description && (
-  <section className="bg-white p-4 sm:p-6 sm:rounded-2xl border border-gray-200 shadow-sm mt-3">
-
-    <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3">
-      About {manufacturer.name}
-    </h2>
-
-    <div className="text-sm text-gray-700 leading-7 whitespace-pre-line">
-      {manufacturer.description}
-    </div>
-
-    <p className="mt-3 text-xs text-gray-500">
-      Manufacturer location: {manufacturer.city},{" "}
-      {manufacturer.location?.state || "India"}
-    </p>
-
-  </section>
-)}
+            <p className="mt-3 text-xs text-gray-500">
+              Manufacturer location: {manufacturer.city},{" "}
+              {manufacturer.location?.state || "India"}
+            </p>
+          </section>
+        )}
 
         {/* ========================================================= */}
         {/* 3. MAIN TABS NAVIGATION                                    */}
@@ -359,7 +409,6 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
                     className="w-full h-full object-cover"
                   />
 
-                  {/* Photo Switcher Overlay Controls */}
                   <div className="absolute bottom-3 left-3 flex gap-2">
                     <button
                       onClick={() => setActiveMediaTab("photos")}
@@ -374,7 +423,6 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
                   </div>
                 </div>
 
-                {/* Thumbnails Row */}
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                   {photos.map((imgUrl, idx) => (
                     <button
@@ -445,7 +493,6 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
                   </h2>
                 </div>
 
-                {/* Trade & Market Sub-card */}
                 {(manufacturer.annualTurnover || manufacturer.mainMarketsList.length > 0 || yearsInBusiness) && (
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
                     <h3 className="text-xs font-extrabold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -484,7 +531,6 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
                   </div>
                 )}
 
-                {/* Manufacturing Capability Sub-card */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
                   <h3 className="text-xs font-extrabold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
                     <Building2 className="w-4 h-4 text-blue-600" />
@@ -522,7 +568,6 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
                   </div>
                 </div>
 
-                {/* Full Factory Address */}
                 <div className="border-t pt-4 text-xs text-gray-600">
                   <span className="font-bold text-gray-900 block mb-1">Factory Location & Address</span>
                   <p>{manufacturer.addressLine}</p>
@@ -531,163 +576,94 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
               </section>
             )}
 
-          {/* ========================================================= */}
-{/* 8. CERTIFICATIONS SECTION                                 */}
-{/* ========================================================= */}
-{(profileSubTab === "overview" || profileSubTab === "certifications") &&
-  (certsList.length > 0 || stringCerts.length > 0) && (
-    <section className="bg-white p-4 sm:p-6 sm:rounded-2xl border border-gray-200 shadow-sm space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
-          <Award className="w-5 h-5 text-blue-600" />
-          Certifications & Standards
-        </h2>
-      </div>
+            {/* ========================================================= */}
+            {/* 8. CERTIFICATIONS SECTION                                 */}
+            {/* ========================================================= */}
+            {(profileSubTab === "overview" || profileSubTab === "certifications") &&
+              (certsList.length > 0 || stringCerts.length > 0) && (
+                <section className="bg-white p-4 sm:p-6 sm:rounded-2xl border border-gray-200 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <Award className="w-5 h-5 text-blue-600" />
+                      Certifications & Standards
+                    </h2>
+                  </div>
 
-      {/* 1. Category Filter Pills */}
+                  {filteredCerts.length > 0 ? (
+                    <div className="flex gap-3 overflow-x-auto pb-2 pt-1 snap-x scrollbar-none">
+                      {filteredCerts.map((cert: any) => (
+                        <div
+                          key={cert.id}
+                          className="w-[250px] sm:w-[270px] shrink-0 snap-start bg-slate-50/80 p-4 rounded-xl border border-slate-200 flex flex-col justify-between hover:border-slate-300 transition-all shadow-xs"
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <h3 className="font-extrabold text-sm text-gray-900 leading-snug line-clamp-1">
+                                {cert.name}
+                              </h3>
+                              {cert.logo ? (
+                                <img
+                                  src={cert.logo}
+                                  alt={cert.name}
+                                  className="h-6 w-auto max-w-[40px] object-contain shrink-0"
+                                />
+                              ) : (
+                                <div className="bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded text-[10px] font-bold text-blue-700 shrink-0">
+                                  ISO
+                                </div>
+                              )}
+                            </div>
 
+                            {cert.description && (
+                              <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">
+                                {cert.description}
+                              </p>
+                            )}
 
-      {/* 2. Relational Certifications - Horizontal Scroll Carousel */}
-      {filteredCerts.length > 0 ? (
-        <div className="flex gap-3 overflow-x-auto pb-2 pt-1 snap-x scrollbar-none">
-          {filteredCerts.map((cert: any) => (
-            <div
-              key={cert.id}
-              className="w-[250px] sm:w-[270px] shrink-0 snap-start bg-slate-50/80 p-4 rounded-xl border border-slate-200 flex flex-col justify-between hover:border-slate-300 transition-all shadow-xs"
-            >
-              <div>
-                {/* Header: Name & Logo / Icon */}
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <h3 className="font-extrabold text-sm text-gray-900 leading-snug line-clamp-1">
-                    {cert.name}
-                  </h3>
-                  {cert.logo ? (
-                    <img
-                      src={cert.logo}
-                      alt={cert.name}
-                      className="h-6 w-auto max-w-[40px] object-contain shrink-0"
-                    />
+                            {cert.issuedBy && (
+                              <span className="inline-block mt-2 text-[10px] bg-slate-200/60 text-slate-700 px-2 py-0.5 rounded font-medium">
+                                Issued by {cert.issuedBy}
+                              </span>
+                            )}
+                          </div>
+
+                          {cert.certificateNo && (
+                            <div className="mt-4 pt-2.5 border-t border-slate-200 flex items-center justify-between text-xs font-mono text-gray-500">
+                              <span className="truncate max-w-[170px]" title={cert.certificateNo}>
+                                {cert.certificateNo}
+                              </span>
+                              <button
+                                onClick={() => handleCopyCertNo(cert.certificateNo, cert.id)}
+                                className="p-1 hover:bg-slate-200/80 rounded text-gray-500 transition-colors"
+                                title="Copy Certificate No"
+                              >
+                                {copiedCertId === cert.id ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <div className="bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded text-[10px] font-bold text-blue-700 shrink-0">
-                      ISO
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {stringCerts.map((c: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="bg-slate-100 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 flex items-center gap-1.5"
+                        >
+                          <Award className="w-3.5 h-3.5 text-blue-600" />
+                          {c}
+                        </span>
+                      ))}
                     </div>
                   )}
-                </div>
-
-                {/* Description */}
-                {cert.description && (
-                  <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">
-                    {cert.description}
-                  </p>
-                )}
-
-                {/* Issuing Body Badge */}
-                {cert.issuedBy && (
-                  <span className="inline-block mt-2 text-[10px] bg-slate-200/60 text-slate-700 px-2 py-0.5 rounded font-medium">
-                    Issued by {cert.issuedBy}
-                  </span>
-                )}
-              </div>
-
-              {/* Footer: Certificate Number & Copy Action */}
-              {cert.certificateNo && (
-                <div className="mt-4 pt-2.5 border-t border-slate-200 flex items-center justify-between text-xs font-mono text-gray-500">
-                  <span className="truncate max-w-[170px]" title={cert.certificateNo}>
-                    {cert.certificateNo}
-                  </span>
-                  <button
-                    onClick={() => handleCopyCertNo(cert.certificateNo, cert.id)}
-                    className="p-1 hover:bg-slate-200/80 rounded text-gray-500 transition-colors"
-                    title="Copy Certificate No"
-                  >
-                    {copiedCertId === cert.id ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
+                </section>
               )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* String Fallback Cards */
-        <div className="flex flex-wrap gap-2 pt-1">
-          {stringCerts.map((c: string, idx: number) => (
-            <span
-              key={idx}
-              className="bg-slate-100 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 flex items-center gap-1.5"
-            >
-              <Award className="w-3.5 h-3.5 text-blue-600" />
-              {c}
-            </span>
-          ))}
-        </div>
-      )}
-    </section>
-  )}
 
-            {/* ========================================================= */}
-            {/* 9. REVIEWS SECTION                                         */}
-            {/* ========================================================= */}
-            {reviewStats.reviewCount > 0 && (
-              <section className="bg-white p-4 sm:p-6 sm:rounded-2xl border border-gray-200 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b pb-3">
-                  <h2 className="text-base sm:text-lg font-bold text-gray-900">Buyer Reviews</h2>
-                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                    Verified Purchases
-                  </span>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl font-extrabold text-gray-900">{reviewStats.avgRating.toFixed(1)}</span>
-                    <div>
-                      <div className="flex items-center gap-0.5 text-amber-400">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className={`w-4 h-4 ${i < Math.round(reviewStats.avgRating) ? "fill-amber-400" : "text-gray-300"}`} />
-                        ))}
-                      </div>
-                      <span className="text-xs text-gray-500 font-medium mt-0.5 block">{reviewStats.reviewCount} total rating(s)</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-4 text-xs font-semibold text-gray-700">
-                    {reviewStats.avgService > 0 && <div>Service: <span className="text-gray-900 font-bold">{reviewStats.avgService.toFixed(1)}</span></div>}
-                    {reviewStats.avgShipping > 0 && <div>Shipping: <span className="text-gray-900 font-bold">{reviewStats.avgShipping.toFixed(1)}</span></div>}
-                    {reviewStats.avgQuality > 0 && <div>Quality: <span className="text-gray-900 font-bold">{reviewStats.avgQuality.toFixed(1)}</span></div>}
-                  </div>
-                </div>
-
-                {/* Review Cards */}
-                <div className="space-y-3">
-                  {reviews.map((rev: any) => (
-                    <div key={rev.id} className="p-3.5 rounded-xl border border-gray-100 bg-white space-y-1.5 text-xs">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[10px]">
-                            {rev.buyer?.name?.charAt(0) || "B"}
-                          </div>
-                          <span className="font-semibold text-gray-900">{rev.buyer?.name || "Verified Buyer"}</span>
-                        </div>
-                        <span className="text-gray-400 text-[10px]">{new Date(rev.createdAt).toLocaleDateString()}</span>
-                      </div>
-
-                      <div className="flex items-center gap-1 text-amber-400">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className={`w-3 h-3 ${i < rev.rating ? "fill-amber-400" : "text-gray-200"}`} />
-                        ))}
-                      </div>
-
-                      {rev.reviewText && <p className="text-gray-700 leading-relaxed">{rev.reviewText}</p>}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
 
         {/* ========================================================= */}
         {/* 12. PRODUCTS TAB                                           */}
@@ -748,6 +724,244 @@ export default function ManufacturerProfileClient({ manufacturer }: Props) {
               <div className="text-center py-8 text-gray-500 text-xs">No products currently listed for this manufacturer.</div>
             )}
           </section>
+        )}
+
+
+          {/* ========================================================= */}
+            {/* 9. REVIEWS SECTION & COLLAPSIBLE REVIEW FORM               */}
+            {/* ========================================================= */}
+            <section className="bg-white p-4 sm:p-6 sm:rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-gray-900">Buyer Reviews</h2>
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    Verified Purchases
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReviewFormOpen((prev) => !prev);
+                    setReviewSuccess(false);
+                    setReviewError(null);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  {isReviewFormOpen ? "Close" : "Write a Review"}
+                </button>
+              </div>
+
+              {/* Collapsible Write a Review Form (Hidden by default) */}
+              {isReviewFormOpen && (
+                <form
+                  onSubmit={handleSubmitReview}
+                  className="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200 space-y-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-semibold text-gray-700 mr-1">Your Rating:</span>
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const active = (hoverRating || userRating) >= star;
+                        return (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setUserRating(star)}
+                            onMouseEnter={() => setHoverRating(star)}
+                            onMouseLeave={() => setHoverRating(0)}
+                            className="p-0.5 focus:outline-none transition-transform hover:scale-110"
+                            aria-label={`Rate ${star} stars`}
+                          >
+                            <Star
+                              className={`w-5 h-5 ${
+                                active ? "fill-amber-400 text-amber-400" : "text-gray-300"
+                              }`}
+                            />
+                          </button>
+                        );
+                      })}
+                      <span className="text-xs font-bold text-gray-700 ml-1">
+                        {hoverRating || userRating}/5
+                      </span>
+                    </div>
+
+                    <span className="text-[11px] text-gray-400">Comment is optional</span>
+                  </div>
+
+                  <textarea
+                    rows={2}
+                    value={userComment}
+                    onChange={(e) => setUserComment(e.target.value)}
+                    placeholder="Write your feedback on product quality, communication, or delivery..."
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF5500] focus:outline-none"
+                  />
+
+                  {reviewError && <p className="text-xs font-medium text-red-600">{reviewError}</p>}
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsReviewFormOpen(false)}
+                      className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 font-semibold text-xs hover:bg-gray-50 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingReview}
+                      className="px-4 py-1.5 rounded-lg bg-[#FF5500] hover:bg-orange-600 disabled:opacity-50 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-xs"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {reviewSuccess && (
+                <p className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg">
+                  Thank you! Your review has been posted.
+                </p>
+              )}
+
+              {reviewStats.reviewCount > 0 ? (
+                <>
+                  {/* Rating Summary Bar */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl sm:text-3xl font-extrabold text-gray-900">
+                        {reviewStats.avgRating.toFixed(1)}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-0.5 text-amber-400">
+                          {[...Array(5)].map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`w-4 h-4 ${
+                                i < Math.round(reviewStats.avgRating) ? "fill-amber-400" : "text-gray-300"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[11px] text-gray-500 font-medium block">
+                          {reviewStats.reviewCount} total rating(s)
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 text-xs font-semibold text-gray-700">
+                      {reviewStats.avgService > 0 && (
+                        <div>
+                          Service: <span className="text-gray-900 font-bold">{reviewStats.avgService.toFixed(1)}</span>
+                        </div>
+                      )}
+                      {reviewStats.avgShipping > 0 && (
+                        <div>
+                          Shipping: <span className="text-gray-900 font-bold">{reviewStats.avgShipping.toFixed(1)}</span>
+                        </div>
+                      )}
+                      {reviewStats.avgQuality > 0 && (
+                        <div>
+                          Quality: <span className="text-gray-900 font-bold">{reviewStats.avgQuality.toFixed(1)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Review Cards: Max 3 shown unless expanded; star-only reviews use compact 1-line row */}
+                  <div className="space-y-2">
+                    {(showAllReviews ? reviewsList : reviewsList.slice(0, 3)).map((rev: any) => {
+                      const commentText = (rev.comment || rev.reviewText || "").trim();
+                      const hasComment = commentText.length > 0;
+
+                      if (!hasComment) {
+                        return (
+                          <div
+                            key={rev.id}
+                            className="px-3 py-2 rounded-lg border border-gray-100 bg-slate-50/60 flex items-center justify-between gap-2 text-xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                {rev.buyer?.name?.charAt(0) || "B"}
+                              </div>
+                              <span className="font-semibold text-gray-900 truncate">
+                                {rev.buyer?.name || "Verified Buyer"}
+                              </span>
+                              <div className="flex items-center gap-0.5 text-amber-400 shrink-0">
+                                {[...Array(5)].map((_, i) => (
+                                  <Star
+                                    key={i}
+                                    className={`w-3 h-3 ${i < rev.rating ? "fill-amber-400" : "text-gray-200"}`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            <span className="text-gray-400 text-[10px] shrink-0">
+                              {new Date(rev.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={rev.id}
+                          className="p-3 rounded-xl border border-gray-100 bg-white space-y-1 text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                {rev.buyer?.name?.charAt(0) || "B"}
+                              </div>
+                              <span className="font-semibold text-gray-900 truncate">
+                                {rev.buyer?.name || "Verified Buyer"}
+                              </span>
+                              <div className="flex items-center gap-0.5 text-amber-400 shrink-0">
+                                {[...Array(5)].map((_, i) => (
+                                  <Star
+                                    key={i}
+                                    className={`w-3 h-3 ${i < rev.rating ? "fill-amber-400" : "text-gray-200"}`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            <span className="text-gray-400 text-[10px] shrink-0">
+                              {new Date(rev.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+
+                          <p className="text-gray-700 leading-relaxed pl-8">{commentText}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Show More / Show Less Button */}
+                  {reviewsList.length > 3 && (
+                    <div className="pt-1 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowAllReviews((prev) => !prev)}
+                        className="w-full sm:w-auto px-4 py-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-700 transition"
+                      >
+                        {showAllReviews
+                          ? "Show fewer reviews"
+                          : `Show more reviews (${reviewsList.length - 3} more)`}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                !isReviewFormOpen && (
+                  <p className="text-xs text-gray-500 text-center py-3">
+                    No reviews yet. Click <span className="font-semibold text-gray-800">Write a Review</span> to share your feedback.
+                  </p>
+                )
+              )}
+            </section>
+          </div>
         )}
       </div>
 

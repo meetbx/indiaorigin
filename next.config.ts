@@ -94,6 +94,16 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        source: "/manufacturers/doller-gift-and-time-39zi8",
+        destination: "/manufacturers/doller-gift-and-time-morbi",
+        permanent: true,
+      },
+                  {
+        source: "/manufacturers/jbt-toys",
+        destination: "/manufacturers/jbt-toys-morbi",
+        permanent: true,
+      },
+      {
         source: "/products/premium-16-inch-luxury-designer-wall-clock-elegant-cream-golden-frame-with-wooden-centre-model-no-124-1794745966451",
         destination: "/products/luxury-16-inch-designer-wall-clock-wooden-centre-model-124",
         permanent: true,

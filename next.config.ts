@@ -95,7 +95,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/manufacturers/doller-gift-and-time-39zi8",
-        destination: "/manufacturers/doller-gift-and-time-morbi",
+        destination: "/manufacturers/dollar-gift-and-time-morbi",
         permanent: true,
       },
                   {

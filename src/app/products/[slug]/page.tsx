@@ -6,16 +6,19 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Metadata } from "next";
 
-import { 
-  ChevronLeft, Search, ShoppingCart, MoreHorizontal, 
-  ChevronRight, Star, ShieldCheck, CheckCircle, Package, Store, Share2, SlidersHorizontal, Phone ,Send
+import {
+  ChevronLeft,
+  Search,
+  Star,
+  ShieldCheck,
+  CheckCircle,
+  SlidersHorizontal,
+  Phone,
 } from "lucide-react";
-import Image from "next/image";
 import ShareButton from "@/components/product-detail/ShareButton";
 import { Suspense } from "react";
 
 import ChatButton from "@/components/product-detail/ChatButton";
-import BadgeDisplay from "@/components/marketplace/BadgeDisplay"; 
 import { normalizeProductData } from "@/lib/product-normalizer";
 import ProductMediaGallery from "@/components/product-detail/ProductMediaGallery";
 import ProductPricingSection from "@/components/product-detail/ProductPricingSection";
@@ -63,8 +66,12 @@ function limitSeoText(value: string, maxLength: number): string {
 function getAbsoluteImageUrl(image: string | undefined): string | undefined {
   if (!image) return undefined;
 
-  if (image.startsWith("https://") || image.startsWith("http://")) {
+  if (image.startsWith("https://")) {
     return image;
+  }
+
+  if (image.startsWith("http://")) {
+    return image.replace("http://", "https://");
   }
 
   if (image.startsWith("/")) {
@@ -82,11 +89,13 @@ export async function generateMetadata({
   const product = await prisma.product.findUnique({
     where: { slug },
     select: {
+      slug: true,
       name: true,
       description: true,
       images: true,
       moq: true,
       unit: true,
+      minPrice: true,
       isPublished: true,
 
       manufacturer: {
@@ -133,18 +142,9 @@ export async function generateMetadata({
   const manufacturerName = cleanSeoText(product.manufacturer?.name);
   const city = cleanSeoText(product.manufacturer?.city);
   const state = cleanSeoText(product.manufacturer?.location?.state);
-
   const location = [city, state].filter(Boolean).join(", ");
 
-  const categoryNames = [
-    product.category?.parent?.parent?.name,
-    product.category?.parent?.name,
-    product.category?.name,
-  ].filter((name): name is string => Boolean(name));
-
-  const categoryText = [...new Set(categoryNames)].join(" > ");
-
-  // Build a concise title around the product's actual search intent.
+  // Title logic kept as-is (Issue #4 excluded)
   const titleParts = [productName];
 
   if (location) {
@@ -160,36 +160,37 @@ export async function generateMetadata({
     65
   );
 
-  // Build the description from real product and supplier information.
+  // Issue #2 Fix: Clean B2B meta description using single product.minPrice
+  const minPrice = Number(product.minPrice || 0);
+  const priceSnippet = minPrice > 0 ? `Wholesale price ₹${minPrice}` : "";
+
+  const moqSnippet = product.moq
+    ? `MOQ: ${product.moq}${product.unit ? ` ${product.unit}` : ""}`
+    : "";
+
+  const supplierSnippet = manufacturerName
+    ? `direct from ${manufacturerName}${location ? ` (${location})` : ""}`
+    : location
+    ? `from verified manufacturer in ${location}`
+    : "from verified Indian manufacturer";
+
   const actualDescription = cleanSeoText(product.description);
 
-  const contextParts = [
-    categoryText ? `Category: ${categoryText}.` : "",
-    manufacturerName ? `Manufacturer: ${manufacturerName}.` : "",
-    location ? `Location: ${location}.` : "",
-    product.moq
-      ? `Minimum order quantity: ${product.moq}${product.unit ? ` ${product.unit}` : ""}.`
-      : "",
-  ].filter(Boolean);
+  const structuredLead = [
+    `Buy ${productName} in bulk ${supplierSnippet}.`,
+    [priceSnippet, moqSnippet].filter(Boolean).join(" | "),
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  let description = actualDescription
-    ? `${actualDescription} ${contextParts.join(" ")}`
-    : [
-        `Explore ${productName}`,
-        categoryText ? `in ${categoryText}` : "",
-        manufacturerName ? `from ${manufacturerName}` : "",
-        location ? `located in ${location}` : "",
-        product.moq
-          ? `with a minimum order quantity of ${product.moq}${product.unit ? ` ${product.unit}` : ""}`
-          : "",
-        "on The India Origin.",
-      ]
-        .filter(Boolean)
-        .join(" ");
+  const rawSummary = actualDescription
+    ? `${structuredLead} ${actualDescription}`
+    : `${structuredLead} Verified B2B supplier on ${SITE_NAME}.`;
 
-  description = limitSeoText(description, 160);
+  const description = limitSeoText(rawSummary, 158);
 
-  const canonicalUrl = `${SITE_URL}/products/${encodeURIComponent(slug)}`;
+  // Issue #1 Fix: Canonical URL from canonical DB slug
+  const canonicalUrl = `${SITE_URL}/products/${encodeURIComponent(product.slug)}`;
 
   const imageUrl = getAbsoluteImageUrl(
     Array.isArray(product.images) ? product.images[0] : undefined
@@ -245,8 +246,8 @@ export async function generateMetadata({
 export default async function ProductDetailPage({ params }: PageProps) {
   const { slug } = await params;
 
-  // 1. Concurrent Database Execution using Promise.all to eliminate sequential query latency
-  const [rawProduct, dummyCheck] = await Promise.all([
+  // 1. Concurrent Database Execution
+  const [rawProduct] = await Promise.all([
     prisma.product.findUnique({
       where: { slug },
       include: {
@@ -254,40 +255,78 @@ export default async function ProductDetailPage({ params }: PageProps) {
         category: true,
       },
     }),
-    Promise.resolve(null), // Placeholder to keep structure clean for concurrent extensions if needed
   ]);
 
   if (!rawProduct || !rawProduct.isPublished) {
-  notFound();
-}
+    notFound();
+  }
 
-  // Fetch similar products dynamically with selective fields concurrently
-// 2. Data Normalization
+  // 2. Data Normalization
   const data = normalizeProductData(rawProduct, []);
-
-
   if (!data) notFound();
+
   const productBlocks = Array.isArray(data.details) ? data.details : [];
 
-  // Construct structured data for AI discovery and Google Rich Results
-// Construct structured data for Google Rich Results & AI Discovery
-  const primaryPrice = data.pricing.minPrice || data.pricing.samplePrice || 0;
+  // Issue #1 Fix: Single consistent canonical URL across schema, breadcrumbs, and child components
+  const canonicalSlug = rawProduct.slug;
+  const canonicalProductUrl = `${SITE_URL}/products/${encodeURIComponent(canonicalSlug)}`;
+
+  const validImages = Array.isArray(data.images)
+    ? data.images
+        .map((img) => getAbsoluteImageUrl(typeof img === "string" ? img : undefined))
+        .filter((img): img is string => Boolean(img))
+    : [];
+
+  // Issue #5 Fix: Support tiered AggregateOffer or single Offer without "0" price
+  const minPrice = Number(data.pricing.minPrice || data.pricing.samplePrice || 0);
+  const maxPrice = Number(data.pricing.maxPrice || 0);
+
+  const sellerSchema = {
+    "@type": "Organization",
+    name: rawProduct.manufacturer?.name || "The India Origin Verified Manufacturer",
+  };
+
+  const offersSchema =
+    minPrice > 0 && maxPrice > minPrice
+      ? {
+          "@type": "AggregateOffer",
+          url: canonicalProductUrl,
+          priceCurrency: "INR",
+          lowPrice: minPrice,
+          highPrice: maxPrice,
+          availability: "https://schema.org/InStock",
+          seller: sellerSchema,
+        }
+      : minPrice > 0
+      ? {
+          "@type": "Offer",
+          url: canonicalProductUrl,
+          priceCurrency: "INR",
+          price: minPrice,
+          availability: "https://schema.org/InStock",
+          seller: sellerSchema,
+        }
+      : undefined;
+
+  // Issue #3 & AggregateRating: Read rating & reviewCount directly from DB/normalized stats;
+  // only emit aggregateRating when real reviews exist so low/unreviewed ratings don't hurt CTR.
+  const ratingValue = Number(data.stats?.rating || 0);
+  const reviewCount = Number(data.stats?.reviewCount || 0);
+  const hasVisibleRating = reviewCount > 0 && ratingValue > 0;
+  const hasRichAggregateRating = reviewCount > 0 && ratingValue >= 3.5;
+  const totalSold = data.stats?.totalSold;
 
   const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: data.name,
-    url: `https://www.theindiaorigin.com/products/${data.slug}`,
-    ...(Array.isArray(data.images) && data.images.length > 0
-      ? {
-          image: data.images.filter(
-            (image): image is string =>
-              typeof image === "string" && image.startsWith("https://")
-          ),
-        }
+    url: canonicalProductUrl,
+    ...(validImages.length > 0 ? { image: validImages } : {}),
+    ...(rawProduct.description
+      ? { description: cleanSeoText(rawProduct.description) }
       : {}),
-    ...(rawProduct.description ? { description: cleanSeoText(rawProduct.description) } : {}),
     ...(rawProduct.id ? { sku: rawProduct.id } : {}),
+    ...(rawProduct.category?.name ? { category: rawProduct.category.name } : {}),
     ...(rawProduct.manufacturer?.name
       ? {
           brand: {
@@ -296,17 +335,18 @@ export default async function ProductDetailPage({ params }: PageProps) {
           },
         }
       : {}),
-    offers: {
-      "@type": "Offer",
-      url: `https://www.theindiaorigin.com/products/${data.slug}`,
-      priceCurrency: "INR",
-      price: primaryPrice > 0 ? primaryPrice : "0",
-      availability: "https://schema.org/InStock",
-      seller: {
-        "@type": "Organization",
-        name: rawProduct.manufacturer?.name || "The India Origin Verified Manufacturer",
-      },
-    },
+    ...(offersSchema ? { offers: offersSchema } : {}),
+    ...(hasRichAggregateRating
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: Number(ratingValue.toFixed(1)),
+            reviewCount,
+            bestRating: 5,
+            worstRating: 1,
+          },
+        }
+      : {}),
   };
 
   const breadcrumbJsonLd = {
@@ -317,28 +357,26 @@ export default async function ProductDetailPage({ params }: PageProps) {
         "@type": "ListItem",
         position: 1,
         name: "Home",
-        item: "https://www.theindiaorigin.com",
+        item: SITE_URL,
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "Products",
-        item: "https://www.theindiaorigin.com/search",
+        item: `${SITE_URL}/search`,
       },
       {
         "@type": "ListItem",
         position: 3,
         name: data.name,
-        item: `https://www.theindiaorigin.com/products/${data.slug}`,
+        item: canonicalProductUrl,
       },
     ],
   };
 
   return (
-<div className="relative mx-auto min-h-screen w-full max-w-md overflow-x-clip border-x border-slate-200/60 bg-[#F8FAFC] pb-28 font-sans text-slate-900 shadow-2xl">      
-
+    <div className="relative mx-auto min-h-screen w-full max-w-md overflow-x-clip border-x border-slate-200/60 bg-[#F8FAFC] pb-28 font-sans text-slate-900 shadow-2xl">
       {/* Inject Structured Data for AI & Search Crawlers */}
-
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -351,8 +389,8 @@ export default async function ProductDetailPage({ params }: PageProps) {
           __html: JSON.stringify(breadcrumbJsonLd).replace(/</g, "\\u003c"),
         }}
       />
-      {/* HEADER */}
 
+      {/* HEADER */}
       <header className="bg-white/95 backdrop-blur-md px-4 py-3 flex items-center justify-between sticky top-0 z-40 border-b border-slate-100 gap-3 w-full shadow-2xs">
         {/* Left: Back Button & Brand Logo */}
         <div className="flex items-center gap-3">
@@ -374,25 +412,24 @@ export default async function ProductDetailPage({ params }: PageProps) {
           </Link>
 
           {/* More Options */}
-          <ProductHeaderMenu 
-            productId={rawProduct.id} 
-            productTitle={data.name} 
-            productSlug={data.slug} 
+          <ProductHeaderMenu
+            productId={rawProduct.id}
+            productTitle={data.name}
+            productSlug={canonicalSlug}
           />
         </div>
       </header>
 
       {/* SECTION 1: MEDIA GALLERY */}
-      <ProductMediaGallery 
+      <ProductMediaGallery
         productId={rawProduct.id}
-        images={data.images} 
-        videoUrl={data.videoUrl} 
-        productName={data.name} 
-        badge={rawProduct.manufacturer?.badge} 
+        images={data.images}
+        videoUrl={data.videoUrl}
+        productName={data.name}
+        badge={rawProduct.manufacturer?.badge}
       />
-      
+
       <main className="space-y-3 pt-2">
-        
         {/* SECTION 2: BASIC INFO & TITLE */}
         <div className="bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)] border-b border-slate-100">
           <div className="flex items-start justify-between gap-3">
@@ -401,22 +438,26 @@ export default async function ProductDetailPage({ params }: PageProps) {
             </h1>
             <ShareButton title={data.name} />
           </div>
-          
-          {/* Rating, Sold Row & Manufacturer Badge */}
-          <div className="flex items-center gap-2 mt-2.5 text-xs text-slate-500 font-medium flex-wrap">
-            <div className="flex items-center text-amber-500 bg-amber-50 px-2 py-0.5 rounded-md">
-              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 mr-1" />
-              <span className="font-bold text-slate-800">{data.stats.rating || "1.0"}</span>
-              <span className="text-slate-400 ml-0.5">({data.stats.reviewCount || "1"})</span>
+
+          {/* Issue #3 Fix: No hardcoded "1.0" / "1" / "200+" fallbacks */}
+          {(hasVisibleRating || totalSold) && (
+            <div className="flex items-center gap-2 mt-2.5 text-xs text-slate-500 font-medium flex-wrap">
+              {hasVisibleRating && (
+                <div className="flex items-center text-amber-500 bg-amber-50 px-2 py-0.5 rounded-md">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 mr-1" />
+                  <span className="font-bold text-slate-800">{ratingValue.toFixed(1)}</span>
+                  <span className="text-slate-400 ml-0.5">({reviewCount})</span>
+                </div>
+              )}
+              {hasVisibleRating && totalSold && <span className="text-slate-300">·</span>}
+              {totalSold && <span className="text-slate-600 font-medium">{totalSold} sold</span>}
             </div>
-            <span className="text-slate-300">·</span>
-            <span className="text-slate-600 font-medium">{data.stats.totalSold || "200+"} sold</span>
-          </div>
+          )}
         </div>
 
         {/* SECTION 3: PRICING & TIERS */}
         <div className="bg-white shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <ProductPricingSection pricing={data.pricing} productSlug={data.slug}/>
+          <ProductPricingSection pricing={data.pricing} productSlug={canonicalSlug} />
         </div>
 
         {/* SECTION 4: CUSTOMIZATION BADGE */}
@@ -424,7 +465,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
           <div className="bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
             <div className="bg-slate-50 hover:bg-slate-100/70 border border-slate-200/80 rounded-xl px-4 py-3 flex items-center justify-between cursor-pointer transition-all">
               <div className="flex items-center gap-2.5 text-xs text-slate-900">
-                <div className="w-7 h-7 rounded-lg bg-50 text-600 flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
                   <SlidersHorizontal className="w-4 h-4 stroke-[2]" />
                 </div>
                 <div>
@@ -466,28 +507,29 @@ export default async function ProductDetailPage({ params }: PageProps) {
         </div>
 
         {/* SECTION 8: SUPPLIER OVERVIEW */}
-<SupplierOverviewSection 
-  supplier={{ 
-    ...data.supplier, 
-    id: rawProduct.manufacturer.id,
-    gstNumber: rawProduct.manufacturer.gstNumber, // <--- Add this line
-    location: typeof data.supplier.location === "string" 
-      ? { state: data.supplier.location, country: "" } 
-      : data.supplier.location ?? undefined
-  }} 
-/>
+        <SupplierOverviewSection
+          supplier={{
+            ...data.supplier,
+            id: rawProduct.manufacturer.id,
+            gstNumber: rawProduct.manufacturer.gstNumber,
+            location:
+              typeof data.supplier.location === "string"
+                ? { state: data.supplier.location, country: "" }
+                : data.supplier.location ?? undefined,
+          }}
+        />
 
         {/* SECTION 9: MAIN MARKETS */}
         <div className="bg-white shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
           <SupplierMarketsSection markets={data.supplier.mainMarkets} />
         </div>
 
-{/* SECTION 10: RECOMMENDATIONS (SIMILAR PRODUCTS & ALTERNATIVE MANUFACTURERS) */}
+        {/* SECTION 10: RECOMMENDATIONS (SIMILAR PRODUCTS & ALTERNATIVE MANUFACTURERS) */}
         <Suspense fallback={<div className="h-48 bg-white animate-pulse rounded-xl m-4" />}>
-          <RecommendationsSection productId={rawProduct.id} slug={data.slug} />
+          <RecommendationsSection productId={rawProduct.id} slug={canonicalSlug} />
         </Suspense>
 
-{/* SECTION 11: DETAILED A+ PRODUCT BLOCKS */}
+        {/* SECTION 11: DETAILED A+ PRODUCT BLOCKS */}
         {productBlocks.length > 0 && (
           <div className="bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
             <h3 className="font-bold text-slate-900 text-xs mb-3 uppercase tracking-wider">Product details</h3>
@@ -496,21 +538,18 @@ export default async function ProductDetailPage({ params }: PageProps) {
             </Suspense>
           </div>
         )}
-
       </main>
 
       {/* FLOATING ACTION BAR */}
-<div className="action-bar-glass fixed inset-x-0 bottom-0 z-50 mx-auto flex w-full max-w-md items-center gap-3 px-4 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">        {/* Chat Button */}
-{/* Chat Button */}
-<div className="flex-1">
-  <ChatButton 
-    productSlug={data.slug} 
-    manufacturerId={rawProduct.manufacturerId} 
-    productId={rawProduct.id} 
-  />
-</div>
-        
-        {/* Call Now Button (Direct Mobile Dialer) */}
+      <div className="action-bar-glass fixed inset-x-0 bottom-0 z-50 mx-auto flex w-full max-w-md items-center gap-3 px-4 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
+        <div className="flex-1">
+          <ChatButton
+            productSlug={canonicalSlug}
+            manufacturerId={rawProduct.manufacturerId}
+            productId={rawProduct.id}
+          />
+        </div>
+
         {rawProduct.manufacturer?.phone ? (
           <a
             href={`tel:${rawProduct.manufacturer.phone}`}
@@ -525,7 +564,6 @@ export default async function ProductDetailPage({ params }: PageProps) {
           </div>
         )}
       </div>
-
     </div>
   );
 }

@@ -285,7 +285,7 @@ export default async function ManufacturerPage({
       ? {
           aggregateRating: {
             "@type": "AggregateRating",
-            ratingValue: Number(avgRating.toFixed(1)),
+            ratingValue: Number(avgRating.toFixed(5)),
             reviewCount: reviewCount,
             bestRating: 5,
             worstRating: 1,
